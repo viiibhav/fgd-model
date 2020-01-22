@@ -447,54 +447,6 @@ def _CaSO4_diss_der2(m, x):
 m.CaSO4_diss_der2 = Constraint(m.x, rule=_CaSO4_diss_der2)
 
 
-def _MgSO3_diss_der2(m, x):
-#    if x == 0:
-##        return m.Keq["MgSO3"] * (m.u["MgSO3", x+dx] - m.u["MgSO3", x]) / dx == \
-##            (m.u["Mg2+", x+dx] - m.u["Mg2+", x]) / dx * m.c["SO32-", x] + \
-##            m.c["Mg2+", x] * (m.u["SO32-", x+dx] - m.u["SO32-", x]) / dx + \
-##            2 * m.u["Mg2+", x] * m.u["SO32-", x]
-#    else:
-    return m.Keq["MgSO3"] * m.v["MgSO3", x] == \
-        m.v["Mg2+", x] * m.c["SO32-", x] + \
-        m.c["Mg2+", x] * m.v["SO32-", x] + \
-        2 * m.u["Mg2+", x] * m.u["SO32-", x]
-
-
-m.MgSO3_diss_der2 = Constraint(m.x, rule=_MgSO3_diss_der2)
-
-
-def _MgHCO3_diss_der2(m, x):
-#    if x == 0:
-##        return m.Keq["MgHCO3+"] * (m.u["MgHCO3+", x+dx] - m.u["MgHCO3+", x]) / dx == \
-##               (m.u["Mg2+", x+dx] - m.u["Mg2+", x]) / dx * m.c["HCO3-", x] + \
-##               m.c["Mg2+", x] * (m.u["HCO3-", x+dx] - m.u["HCO3-", x]) / dx + \
-##               2 * m.u["Mg2+", x] * m.u["HCO3-", x]
-#    else:
-    return m.Keq["MgHCO3+"] * m.v["MgHCO3+", x] == \
-           m.v["Mg2+", x] * m.c["HCO3-", x] + \
-           m.c["Mg2+", x] * m.v["HCO3-", x] + \
-           2 * m.u["Mg2+", x] * m.u["HCO3-", x]
-
-
-m.MgHCO3_diss_der2 = Constraint(m.x, rule=_MgHCO3_diss_der2)
-
-
-def _MgSO4_diss_der2(m, x):
-#    if x == 0:
-##        return m.Keq["MgSO4"] * (m.u["MgSO4", x+dx] - m.u["MgSO4", x]) / dx == \
-##            (m.u["Mg2+", x+dx] - m.u["Mg2+", x]) / dx * m.c["SO42-", x] + \
-##            m.c["Mg2+", x] * (m.u["SO42-", x+dx] - m.u["SO42-", x]) / dx + \
-##            2 * m.u["Mg2+", x] * m.u["SO42-", x]
-#    else:
-    return m.Keq["MgSO4"] * m.v["MgSO4", x] == \
-        m.v["Mg2+", x] * m.c["SO42-", x] + \
-        m.c["Mg2+", x] * m.v["SO42-", x] + \
-        2 * m.u["Mg2+", x] * m.u["SO42-", x]
-
-
-m.MgSO4_diss_der2 = Constraint(m.x, rule=_MgSO4_diss_der2)
-
-
 # =============================================================================
 # Define u = dcdx
 def _reform_con(m, i, x):
@@ -554,7 +506,7 @@ def _sulfite(m, x):
 #        return Constraint.Skip
     else:
         expr = 0
-        for k in ["SO2", "HSO3-", "SO32-", "CaSO3", "MgSO3"]:
+        for k in ["SO2", "HSO3-", "SO32-", "CaSO3"]:
             expr += m.Diff[k] * (m.v[k, x] - 2 / (x) * m.u[k, x])
         return expr == 0
 
@@ -569,7 +521,7 @@ def _carbonate(m, x):
 #        return Constraint.Skip
     else:
         expr = 0
-        for k in ["CO2", "HCO3-", "CO32-", "CaCO3", "CaHCO3+", "MgHCO3+"]:
+        for k in ["CO2", "HCO3-", "CO32-", "CaCO3", "CaHCO3+"]:
             expr += m.Diff[k] * (m.v[k, x] - 2 / (x) * m.u[k, x])
         expr += m.rd_CaCO3[x]
         return expr == 0
@@ -613,7 +565,7 @@ def _sulfate(m, x):
 #        return sum(m.J[k, x] for k in ["SO42-", "CaSO4", "MgSO4"]) == 0
     else:
         expr = 0
-        for k in ["SO42-", "CaSO4", "MgSO4"]:
+        for k in ["SO42-", "CaSO4"]:
             expr += m.Diff[k] * (m.v[k, x] - 2 / (x) * m.u[k, x])
         expr -= m.rc_CaSO4[x]
         return expr == 0
