@@ -58,6 +58,10 @@ x = list(np.round(np.linspace(0, r, num=nfe+1), decimals=decimals))
 #dx = round(x[-2] - x[-1], decimals)
 m.x = ContinuousSet(initialize=x)
 
+nfe_t = 10
+t = list(np.linspace(0, 10, num=nfe_t+1))
+m.t = ContinuousSet(initialize=t)
+
 spc = [sp for sp in sp_all if sp != "CO2" and sp != "SO2"]
 i.remove("CaHSO3+")
 i.remove("MgHSO3+")
