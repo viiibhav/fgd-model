@@ -8,21 +8,22 @@ Created on Sun Mar  8 17:20:15 2020
 from __future__ import division, print_function
 
 from pyomo.environ import (ConcreteModel, Set, Param, Var,
-                           Expression, Constraint, Objective,
-                           NonNegativeReals, exp, log, value,
-                           TransformationFactory, minimize, Suffix)
+                            Expression, Constraint, Objective,
+                            NonNegativeReals, exp, log, value,
+                            TransformationFactory, minimize, Suffix)
 from pyomo.opt import (SolverFactory, SolverStatus, TerminationCondition,
-                       ProblemFormat)
+                        ProblemFormat)
 from pyomo.dae import DerivativeVar, ContinuousSet
-from pyomo.contrib.pynumero.interfaces import PyomoNLP
+# from pyomo.contrib.pynumero.interfaces import PyomoNLP
 
 import matplotlib.pyplot as plt
 import numpy as np
 from scipy.integrate import odeint
+from scipy.optimize import root
 import seaborn as sns
 sns.set_style("whitegrid")
 pi = np.pi
-import cloudpickle as pickle
+# import cloudpickle as pickle
 
 
 """
@@ -30,18 +31,21 @@ Scrubber Model
 """
 
 
-m = ConcreteModel()
+# m = ConcreteModel()
 
 # =============================================================================
 # Sets
 # =============================================================================
-z = list(np.linspace(0, 10))
-m.z = Set(initialize=z)
+# dz = 0.1  # m
+# num_levels = int(ZT / dz + 1)
+# z = np.linspace(0, ZT, num_levels)
+# m.z = Set(initialize=z)
 
 
 # =============================================================================
 # Params
 # =============================================================================
+ZT = 10
 g = 9.81  # m/s**2
 R = 8.314  # J/mol-K
 H = 6.38e-03  # kmol/m**3/Pa
@@ -70,7 +74,7 @@ N = 10**(logN)  # or e^logN? Check.  # reference Johnstone I&EC 1937 pp 1396.
 
 y_in = 0.001  # guess
 y_out = 0.0001
-cH0 = 1e-05
+cH0 = 0.5 * 1e-05
 
 
 # droplet velocity 
@@ -83,10 +87,12 @@ def _dupdt(up, t):
 
 t = np.linspace(0, 8)
 up = odeint(_dupdt, up0, t)
+# up = up0
 plt.figure(1)
 plt.rc("text", usetex=True)
 plt.rc("font", family="serif")
 plt.plot(t, up)
+up = up0
 
 
 # distribution coefficient
@@ -101,16 +107,18 @@ def lam(c, i):
 
 
 pH_range = np.linspace(0.2, 9.2)
-cH = 10**(-pH_range)
+cH_range = 10**(-pH_range)
 plt.figure(2)
-plt.plot(pH_range, lam(cH, 0), linestyle="-", marker="s", label=r"H$_2$SO$_3$")
-plt.plot(pH_range, lam(cH, 1), linestyle="-", marker="D", label=r"HSO$_3^-$")
-plt.plot(pH_range, lam(cH, 2), linestyle="-", marker="^", label=r"SO$_3^{2-}$")
+plt.plot(pH_range, lam(cH_range, 0), linestyle="-", marker="s", label=r"H$_2$SO$_3$")
+plt.plot(pH_range, lam(cH_range, 1), linestyle="-", marker="D", label=r"HSO$_3^-$")
+plt.plot(pH_range, lam(cH_range, 2), linestyle="-", marker="^", label=r"SO$_3^{2-}$")
 plt.legend()
 
 
 # y_eqm = p_star / p
 dz = 0.1  # m
+num_levels = int(ZT / dz + 1)
+z = np.linspace(0, ZT, num_levels)
 a = 1 / 3600 * L / (np.pi / 6 * dp**3) * np.pi * dp**2 * dz / up0
 D_SO2 = (9.86e-03 * T**1.75 * (1 / M_air + 1 / M_SO2)**0.5) / \
         (p * (V_air**(1 / 3) + V_SO2**(1 / 3))**2)
@@ -119,7 +127,7 @@ Re = dp * abs(up - ug) * rho_g / mu_g
 Sh = 2 + 0.552 * Re**0.5 * Sc**(1 / 3)
 ky = Sh * D_SO2 * H * p / dp
 cSO2 = 2072.24e-03 / M_SO2 * 1e-03  # mol/m**L
-cSO4 = cSO2# * 1000
+cSO4 = 0#cSO2# * 1000
 
 
 def p_star(cH):
@@ -129,7 +137,11 @@ def p_star(cH):
     return num / (den1 * den2)
 
 
-p0SO4 = p_star(cH[25])  # cH such that pH=5 approx
+def yi(cH):
+    return p_star(cH) / p
+
+
+p0SO4 = p_star(cH_range[25])  # cH such that pH=5 approx
 
 
 def f(cH):
@@ -160,9 +172,20 @@ def dfdcH(cH):
     return g1 * dg2 + g2 * dg1
 
 
+ky0 = 90
 def dcHdz(cH, z):
     y = f(cH) / (1 + f(cH))
-    return ky * a * (y - y_in) / (G * (1 - y_in)) * 1 / dfdcH(cH)
+    dfdCH_inv = 1 / dfdcH(cH)
+    print(y.shape, f(cH).shape, dfdCH_inv.shape)
+    return ky0 * a * (y - y_in) / (G * (1 - y_in)) * dfdCH_inv
+
+
+y20 = 0.0001
+p0SO4 = y20 * p
+
+cH_sol = odeint(dcHdz, cH0, z)#, full_output=1)
+plt.figure()
+plt.plot(z, cH_sol)
 
 
 
