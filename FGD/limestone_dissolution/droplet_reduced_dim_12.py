@@ -35,29 +35,16 @@ m = ConcreteModel()
 # =============================================================================
 # Set
 # =============================================================================
+# Radial coordinate
 r = d / 2
 nfe = 50
 decimals = 10
 dx = round(r / nfe, decimals)
 r = round(dx * nfe, decimals)
-#x = list(np.round(np.linspace(r, 0, num=nfe+1), decimals=decimals))
 x = list(np.round(np.linspace(0, r, num=nfe+1), decimals=decimals))
-
-#decimals = 10
-#r1 = 0.0013
-#nfe1 = 40
-#dx1 = round(r1 / nfe1, decimals)
-#r1 = round(dx1 * nfe1, decimals)
-#x1 = list(np.round(np.linspace(r1, 0, num=nfe1+1), decimals=decimals))
-#nfe2 = 60
-#dx2 = round((r - r1) / nfe2, decimals)
-#r = round(dx2 * nfe2, decimals) + r1
-#x2 = list(np.round(np.linspace(r, r1, num=nfe2+1), decimals=decimals))
-#nfe = nfe1 + nfe2
-#x = x2 + x1[1:]
-#dx = round(x[-2] - x[-1], decimals)
 m.x = ContinuousSet(initialize=x)
 
+# Species
 spc = [sp for sp in sp_all if sp != "CO2" and sp != "SO2"]
 i.remove("CaHSO3+")
 i.remove("MgHSO3+")
@@ -69,15 +56,15 @@ i.remove("Cl-")
 i.remove("SO42-")
 i.remove("CaSO4")
 
-
 m.i = Set(initialize=i)
 
+# Eqm species
 eq_i = ["SO2", "HSO3-", "HCO3-", "CaSO3", "CaCO3", "CaHCO3+"]
-#assert set(eq_i).issubset(i)
 m.eq_i = Set(initialize=eq_i)
 
 alg_vars = ["SO2", "Ca2+", "OH-", "SO32-", "HSO3-", "HCO3-", "CO32-"]
 diff_vars = [sp for sp in i if sp not in alg_vars]
+
 sulfite_species = [sp for sp in i if "SO" in sp]
 carbonate_species = [sp for sp in i if "CO" in sp]
 calcium_species = [sp for sp in i if "Ca" in sp]
@@ -90,16 +77,24 @@ charged_species = [sp for sp in i if "+" in sp or "-" in sp]
 T = 25 + 273.15  # [K]
 R = 8.314        # [J/mol-K]
 
-# m.gam = Param(m.i, rule=(lambda m, sp: gam[sp] if sp in spc else 1.0))
-
 # Equilibrium constants (Radian corp. data, 1970)
 # [Keq] = mol/L --> mol/cm**3. [Kw] = (mol/L)**2 --> (mol/cm**3)**2
 Keq_all = {sp: 1e-03 * (10**(-vals[0] / T - vals[1] * np.log10(T) - vals[2] * T +
                     vals[3])) for sp, vals in Keq_const.items()}
 Keq = {sp: k for sp, k in Keq_all.items() if sp in eq_i and sp != "SO2"}
 Keq["SO2"] = Keq_all["H2SO3"]
+
+
+"""
+Using new K values from other literature:
+K[SO2] and K[HSO3-] from ammonia based scrubber paper (2011)
+K[CaCO3] and K[CaHCO3+] from Jacobson and Langmuir (1973)
+K[HCO3-] from Roy et al. (1993)
+K[CaSO3] from Frydman et al. (1958)
+"""
+
 m.Keq = Param(m.eq_i, initialize=Keq)
-Kw = Keq_all["H2O"] * 1e-03
+Kw = Keq_all["H2O"] * 1e+03
 m.Kw = Param(initialize=Kw)
 
 # Diffusivity [m**2/s] --> [cm**2/s]
@@ -220,18 +215,6 @@ def _ro_SO3(m, x):
 
 
 m.ro_SO3 = Expression(m.x, rule=_ro_SO3)
-
-
-# =============================================================================
-## Flux
-#def _flux(m, i, x):
-#    if x == 0:  # skip at surface
-#        return Expression.Skip
-#    else:
-#        return -m.Diff[i] * m.u[i, x]
-#
-#
-#m.J = Expression(m.i, m.x, rule=_flux)
 
 
 # =============================================================================
@@ -562,10 +545,10 @@ m.objective = Objective(expr=1, sense=minimize)
 
 
 # =============================================================================
-discretizer = TransformationFactory("dae.finite_difference")
-discretizer.apply_to(m, nfe=nfe, wrt=m.x, scheme="BACKWARD")
-#discretizer = TransformationFactory("dae.collocation")
-#discretizer.apply_to(m, nfe=nfe, ncp=1, wrt=m.x)#, scheme="Backward")
+# discretizer = TransformationFactory("dae.finite_difference")
+# discretizer.apply_to(m, nfe=nfe, wrt=m.x, scheme="BACKWARD")
+discretizer = TransformationFactory("dae.collocation")
+discretizer.apply_to(m, nfe=nfe, ncp=3, wrt=m.x)
 
 #m.dudx["SO2", 0].fix(0.0)
 #m.dudx["CO2", 0].fix(0.0)
