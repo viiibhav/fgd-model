@@ -79,8 +79,8 @@ R = 8.314        # [J/mol-K]
 
 # Equilibrium constants (Radian corp. data, 1970)
 # [Keq] = mol/L --> mol/cm**3. [Kw] = (mol/L)**2 --> (mol/cm**3)**2
-Keq_all = {sp: 1e-03 * (10**(-vals[0] / T - vals[1] * np.log10(T) - vals[2] * T +
-                    vals[3])) for sp, vals in Keq_const.items()}
+Keq_all = {sp: 10**(-vals[0] / T - vals[1] * np.log10(T) - vals[2] * T +
+                    vals[3]) for sp, vals in Keq_const.items()}
 Keq = {sp: k for sp, k in Keq_all.items() if sp in eq_i and sp != "SO2"}
 Keq["SO2"] = Keq_all["H2SO3"]
 
@@ -94,11 +94,11 @@ K[CaSO3] from Frydman et al. (1958)
 """
 
 m.Keq = Param(m.eq_i, initialize=Keq)
-Kw = Keq_all["H2O"] * 1e+03
+Kw = Keq_all["H2O"]
 m.Kw = Param(initialize=Kw)
 
-# Diffusivity [m**2/s] --> [cm**2/s]
-m.Diff = Param(m.i, rule=(lambda m, i: Diff[i] * 1e+04))
+# Diffusivity [m**2/s]
+m.Diff = Param(m.i, rule=(lambda m, i: Diff[i]))
 
 # charge
 z_sp["CO2"], z_sp["SO2"] = 0, 0
@@ -114,10 +114,10 @@ m.gases = Set(initialize=["SO2", "CO2"])
 m.p = Param(m.gases, initialize=p)
 m.p_i = Param(m.gases, initialize=p)
 
-# mass transfer coeff [mol/(m**2 s Pa)] --> [mol/(cm**2 s Pa)]
+# mass transfer coeff [mol/(m**2 s Pa)]
 kG = {}
-kG["SO2"] = 5e-05 * 1e-04  # Brogren & Karlsson
-kG["CO2"] = 5e-05 * 1e-04
+kG["SO2"] = 5e-05  # Brogren & Karlsson
+kG["CO2"] = 5e-05
 
 
 # =============================================================================
@@ -128,10 +128,10 @@ kG["CO2"] = 5e-05 * 1e-04
 #def _c_init(m, i, x):
 #    return csol_avg[i]
 #m.c = Var(m.i, m.x, initialize=_c_init)
-m.c = Var(m.i, m.x, initialize=1e-06)
-m.u = Var(m.i, m.x, initialize=1e-10)
-m.v = Var(m.i, m.x, initialize=1e-06)
-m.dcdx = DerivativeVar(m.c, wrt=(m.x), initialize=1e-8)
+m.c = Var(m.i, m.x, initialize=1e-03)
+m.u = Var(m.i, m.x, initialize=1e-06)
+m.v = Var(m.i, m.x, initialize=1e-03)
+m.dcdx = DerivativeVar(m.c, wrt=(m.x), initialize=1e-03)
 m.dudx = DerivativeVar(m.u, wrt=(m.x), initialize=0.0)
 
 
@@ -550,8 +550,8 @@ m.objective = Objective(expr=1, sense=minimize)
 discretizer = TransformationFactory("dae.collocation")
 discretizer.apply_to(m, nfe=nfe, ncp=3, wrt=m.x)
 
-#m.dudx["SO2", 0].fix(0.0)
-#m.dudx["CO2", 0].fix(0.0)
+# m.dudx["SO2", 0].fix(0.0)
+# m.dudx["CO2", 0].fix(0.0)
 m.dudx["SO2", r].fix(0.0)
 m.dudx["CO2", r].fix(0.0)
 for comp in diff_vars:
@@ -560,8 +560,6 @@ for comp in diff_vars:
     else:
         m.dcdx[comp, r].fix(0.0)
 
-#for k in i:
-#    m.v[k, 0].fix(0.0)
 
 #for comp in diff_vars:
 #    m.dcdx_disc_eq[comp, r].deactivate()
@@ -569,15 +567,15 @@ for comp in diff_vars:
 #            m.dcdx[comp, 0] == (m.c[comp, dx] - m.c[comp, 0]) / dx))
     
 
-#nlp = PyomoNLP(m)
-#x = nlp.create_vector_x()
-#x0 = nlp.x_init()
-##lam = nlp.create_vector_y()
+# nlp = PyomoNLP(m)
+# x = nlp.create_vector_x()
+# x0 = nlp.x_init()
+## lam = nlp.create_vector_y()
 
 # Evaluate jacobian
-#jac_c = nlp.jacobian_g(x0)
+# jac_c = nlp.jacobian_g(x0)
 
-m.dual = Suffix(direction=Suffix.IMPORT)
+# m.dual = Suffix(direction=Suffix.IMPORT)
 
 opt = SolverFactory("ipopt")
 opt.options['linear_solver'] = 'MA27'
@@ -592,65 +590,61 @@ opt.options["bound_relax_factor"] = 1e-03
 opt.options["honor_original_bounds"] = "yes"
 #opt.options["max_iter"] = 1
 
-#sb = TransformationFactory('contrib.strip_var_bounds')
-#sb.apply_to(m,reversible=True)
-results = opt.solve(m, tee=True)
 
-if (results.solver.termination_condition == TerminationCondition.infeasible or
-        results.solver.termination_condition ==
-        TerminationCondition.maxIterations):
-    while opt.options['bound_push'] <= 0.01 and opt.options['mu_init'] <= 0.01:
-        opt.options['bound_push'] *= 10
-        results = opt.solve(m, tee=True, load_solutions=True)
-        if (results.solver.termination_condition ==
-                TerminationCondition.optimal):
-            break
-        if opt.options['bound_push'] == 0.1 and opt.options['mu_init'] != 0.1:
-            opt.options['bound_push'] = 1e-6
-            opt.options['mu_init'] *= 10
+if __name__ == '__main__':
 
-#sb.revert(m)
-#m.write(filename="so2_abs_reform.nl", format=ProblemFormat.nl)
-
-#results = opt.solve(m, tee=True, load_solutions=True)
-
-
-# =============================================================================
-stale_dudx_vars = [comp for comp in m.dudx if m.dudx[comp[0], comp[1]].stale]
-stale_dcdx_vars = [comp for comp in m.dcdx if m.dcdx[comp[0], comp[1]].stale]
-
-#csol = {sp: {x_: value(m.c[sp, x_]) for x_ in m.x} for sp in m.i}
-#filename = "csol_{}.pkl".format(nfe)
-#pickle.dump(csol, open(filename, "wb"))
-
-# =============================================================================
-##plt.figure(figsize=(10,5))
-plt.rc('text', usetex=True)
-plt.rc('font', family='serif')
-# plt.rc('xtick', labelsize=20) 
-# plt.rc('ytick', labelsize=20)
-# plt.rc('axes', labelsize=25)    # fontsize of the x and y labels
-plt.plot(list(m.x), [value(m.c["SO2", x_]) for x_ in list(m.x)], '-')
-#xticks = [round(x_, 5) for x_ in m.x]
-#plt.xticks(xticks, xticks[::-1])
-plt.xlabel(r'\Large Radial coordinate [m] (center --$>$ surface)')
-plt.ylabel(r'\Large SO$_2$ Concentration [mol/m$^3$]')
-plt.xlim([0.0, r])
-plt.grid()
-plt.tight_layout()
-#plt.plot([0.99 * r, 0.99 * r], [value(m.c["SO2", 0.0]), value(m.c["SO2", r])], "k--")
-#plt.savefig("SO2_profile_main.pdf")
-#plt.savefig("SO2_profile_main.png")
-#plt.savefig("SO2_profile_main.svg")
-
-plt.figure()
-plt.plot(list(m.x), [value(m.c["CaCO3", x_]) for x_ in list(m.x)])
-plt.xlabel(r'\Large Radial coordinate (center --$>$ surface)')
-plt.ylabel(r'\Large CaCO$_3$ Concentration [mol/m$^3$]')
-plt.xlim([0.0, r])
-plt.grid()
-plt.tight_layout()
-
-print("delta C[SO2] =", m.c["SO2", r]() - m.c["SO2", 0]())
-print("C[SO2] at the surface =", m.c["SO2", r]())
-#"""
+    # sb = TransformationFactory('contrib.strip_var_bounds')
+    # sb.apply_to(m,reversible=True)
+    results = opt.solve(m, tee=True)
+    
+    if (results.solver.termination_condition == TerminationCondition.infeasible or
+            results.solver.termination_condition ==
+            TerminationCondition.maxIterations):
+        while opt.options['bound_push'] <= 0.01 and opt.options['mu_init'] <= 0.01:
+            opt.options['bound_push'] *= 10
+            results = opt.solve(m, tee=True, load_solutions=True)
+            if (results.solver.termination_condition ==
+                    TerminationCondition.optimal):
+                break
+            if opt.options['bound_push'] == 0.1 and opt.options['mu_init'] != 0.1:
+                opt.options['bound_push'] = 1e-6
+                opt.options['mu_init'] *= 10
+    
+    # sb.revert(m)
+    # m.write(filename="so2_abs_reform.nl", format=ProblemFormat.nl)
+    
+    # results = opt.solve(m, tee=True, load_solutions=True)
+    
+    
+    # =============================================================================
+    # Stale vars
+    stale_dudx_vars = [comp for comp in m.dudx if m.dudx[comp[0], comp[1]].stale]
+    stale_dcdx_vars = [comp for comp in m.dcdx if m.dcdx[comp[0], comp[1]].stale]
+    
+    
+    # =============================================================================
+    plt.figure()
+    plt.rc('text', usetex=True)
+    plt.rc('font', family='serif')
+    # plt.rc('xtick', labelsize=20) 
+    # plt.rc('ytick', labelsize=20)
+    # plt.rc('axes', labelsize=25)    # fontsize of the x and y labels
+    plt.plot(list(m.x), [value(m.c["SO2", x_]) for x_ in list(m.x)])
+    plt.xlabel(r'\Large Radial coordinate [m] (center --$>$ surface)')
+    plt.ylabel(r'\Large SO$_2$ Concentration [M]')
+    plt.xlim([0.0, r])
+    plt.grid()
+    plt.tight_layout()
+    
+    
+    plt.figure()
+    plt.plot(list(m.x), [value(m.c["CaCO3", x_]) for x_ in list(m.x)])
+    plt.xlabel(r'\Large Radial coordinate (center --$>$ surface)')
+    plt.ylabel(r'\Large CaCO$_3$ Concentration [M]')
+    plt.xlim([0.0, r])
+    plt.grid()
+    plt.tight_layout()
+    
+    print("delta C[SO2] =", m.c["SO2", r]() - m.c["SO2", 0]())
+    print("C[SO2] at the surface =", m.c["SO2", r]())
+    #"""
