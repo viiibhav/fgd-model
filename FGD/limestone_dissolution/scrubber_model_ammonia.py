@@ -80,7 +80,8 @@ cH0 = 0.5 * 1e-05
 # droplet velocity 
 def _dupdt(up, t):
     Re = dp * abs(up - ug) * rho_g / mu_g
-    Cdrag = 24 / Re * (1 + 0.125 * R**0.72)
+    Cdrag = 24 / Re * (1 + 0.125 * Re**0.72)
+    # print(Cdrag)
     return g * (rho_p - rho_g) / rho_p - \
         3 / 4 * (rho_g * (up - ug)**2 * Cdrag) / (rho_p * dp)
 
@@ -183,9 +184,9 @@ def dcHdz(cH, z):
 y20 = 0.0001
 p0SO4 = y20 * p
 
-cH_sol = odeint(dcHdz, cH0, z)#, full_output=1)
-plt.figure()
-plt.plot(z, cH_sol)
+# cH_sol = odeint(dcHdz, cH0, z)#, full_output=1)
+# plt.figure()
+# plt.plot(z, cH_sol)
 
 
 

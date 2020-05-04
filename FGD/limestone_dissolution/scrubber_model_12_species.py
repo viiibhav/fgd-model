@@ -24,4 +24,5 @@ import numpy as np
 pi = np.pi
 # import cloudpickle as pickle
 
-from droplet_reduced_dim_12 import m, opt
+from droplet_reduced_dim_12 import m, build_droplet_model
+
