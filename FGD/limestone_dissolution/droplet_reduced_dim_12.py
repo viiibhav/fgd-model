@@ -9,8 +9,8 @@ from __future__ import division, print_function
 
 from WFGD_data import (i, sp_all, d, z_sp, c, gam, Keq_const, Diff,
                        m_limestone, rho_l)
-from pyomo.environ import (ConcreteModel, Set, Param, Var,
-                           Expression, Constraint, Objective,
+from pyomo.environ import (ConcreteModel, Set, Param, Var, Block,
+                           Expression, Constraint, ConstraintList, Objective,
                            NonNegativeReals, exp, log, value,
                            TransformationFactory, minimize, Suffix)
 from pyomo.opt import (SolverFactory, SolverStatus, TerminationCondition,
@@ -33,7 +33,7 @@ All units in cm, cm**3 etc.
 m = ConcreteModel()
 
 # =============================================================================
-# Set
+# Sets
 # =============================================================================
 # Radial coordinate
 r = d / 2
@@ -174,23 +174,16 @@ m.r_CO2 = Expression(m.x, rule=_r_CO2)
 # =============================================================================
 # Limestone dissolution
 def _rd_CaCO3(m, x):
-    # return m.kd_CaCO3 * (m.RS_CaCO3[b] - 1)
-    # xi = sum(-m.Diff_l[k] * m.dcdr[k, b] for k in ["HCO3-", "CO32-", "CaCO3",
-    #          "CaHCO3+", "MgHCO3+"])
 #    if x == r:  # 0 to skip at surface
     if x == 0:
         return Expression.Skip
     else:
         xi = 0
-#        for k in ["HCO3-", "CO32-", "CaCO3", "CaHCO3+", "MgHCO3+"]:
         for k in ["HCO3-", "CO32-", "CaCO3"]:
             xi += -m.Diff[k] * m.u[k, x]
         return 6 * m_limestone / (d * rho_l) * xi
 
 
-#m.rd_CaCO3 = Var(m.x, initialize=_rd_CaCO3)
-#m.rd_CaCO3_con = Constraint(m.x, rule=(lambda m, x: m.rd_CaCO3[x] ==
-#                                       _rd_CaCO3(m, x)))
 m.rd_CaCO3 = Expression(m.x, rule=_rd_CaCO3)
 
 
@@ -204,33 +197,17 @@ m.rc_CaSO3 = Expression(m.x, rule=_rc_CaSO3)
 
 
 # =============================================================================
-# Calcium sulfite oxidation
-def _ro_SO3(m, x):
-    # rad = m.d / 2
-    # pp_O2 = m.p_in * y_FG_sp["O2"]
-    # pp_O2 = m.p["O2"]
-    # N_O2 = 10 * m.k0_l * pp_O2 / m.H_O2
-    # return 2 * 3 / rad * N_O2
-    return 0
-
-
-m.ro_SO3 = Expression(m.x, rule=_ro_SO3)
-
-
-# =============================================================================
 # Henry's constants (conc * H = pressure)
 den = 0.011843 * R * T * np.exp(3100 * (1 / T - 1 / 298.15))
 H_SO2 = 1 / den
-# convert to [Pa / (mol/cm**3)]
-H_SO2 *= 1e+06
+H_SO2 *= 1e+06  # convert to [Pa / (mol/cm**3)]
 m.H_SO2 = Param(initialize=H_SO2)
 
-rho_CO2 = 1.98  # [kg/m**3]  # STP
+rho_CO2 = 1.98     # [kg/m**3]  # STP
 H_CO2 = 1 / 0.035  # [bar/(mol/kg)]  # NIST
-H_CO2 *= 10**5  # [Pa / (mol/kg)]
-H_CO2 /= rho_CO2  # [Pa / (mol/m**3)]
-# convert to [Pa / (mol/cm**3)]
-H_CO2 *= 1e+06
+H_CO2 *= 10**5     # [Pa / (mol/kg)]
+H_CO2 /= rho_CO2   # [Pa / (mol/m**3)]
+H_CO2 *= 1e+06     # convert to [Pa / (mol/cm**3)]
 m.H_CO2 = Param(initialize=H_CO2)
 
 
@@ -238,52 +215,37 @@ m.H_CO2 = Param(initialize=H_CO2)
 # Equilibrium reactions
 def _water_diss(m, x):
     return m.c["H+", x] * m.c["OH-", x] == m.Kw
-
-
-m.water_diss = Constraint(m.x, rule=_water_diss)
+# m.water_diss = Constraint(m.x, rule=_water_diss)
 
 
 def _H2SO3_diss(m, x):  # use Keq[H2SO3]
     return m.Keq["SO2"] * m.c["SO2", x] == m.c["H+", x] * m.c["HSO3-", x]
-
-
-m.H2SO3_diss = Constraint(m.x, rule=_H2SO3_diss)
+# m.H2SO3_diss = Constraint(m.x, rule=_H2SO3_diss)
 
 
 def _HSO3_diss(m, x):
     return m.Keq["HSO3-"] * m.c["HSO3-", x] == m.c["H+", x] * m.c["SO32-", x]
-
-
-m.HSO3_diss = Constraint(m.x, rule=_HSO3_diss)
+# m.HSO3_diss = Constraint(m.x, rule=_HSO3_diss)
 
 
 def _HCO3_diss(m, x):
     return m.Keq["HCO3-"] * m.c["HCO3-", x] == m.c["H+", x] * m.c["CO32-", x]
-
-
-m.HCO3_diss = Constraint(m.x, rule=_HCO3_diss)
+# m.HCO3_diss = Constraint(m.x, rule=_HCO3_diss)
 
 
 def _CaSO3_diss(m, x):
     return m.Keq["CaSO3"] * m.c["CaSO3", x] == m.c["Ca2+", x] * m.c["SO32-", x]
-
-
-m.CaSO3_diss = Constraint(m.x, rule=_CaSO3_diss)
+# m.CaSO3_diss = Constraint(m.x, rule=_CaSO3_diss)
 
 
 def _CaCO3_diss(m, x):
     return m.Keq["CaCO3"] * m.c["CaCO3", x] == m.c["Ca2+", x] * m.c["CO32-", x]
-
-
-m.CaCO3_diss = Constraint(m.x, rule=_CaCO3_diss)
+# m.CaCO3_diss = Constraint(m.x, rule=_CaCO3_diss)
 
 
 def _CaHCO3_diss(m, x):
-    return m.Keq["CaHCO3+"] * m.c["CaHCO3+", x] == \
-           m.c["Ca2+", x] * m.c["HCO3-", x]
-
-
-m.CaHCO3_diss = Constraint(m.x, rule=_CaHCO3_diss)
+    return m.Keq["CaHCO3+"] * m.c["CaHCO3+", x] == m.c["Ca2+", x] * m.c["HCO3-", x]
+# m.CaHCO3_diss = Constraint(m.x, rule=_CaHCO3_diss)
 
 
 # =============================================================================
@@ -297,9 +259,7 @@ def _water_diss_der2(m, x):
     return m.v["H+", x] * m.c["OH-", x] + \
         m.c["H+", x] * m.v["OH-", x] + \
         2 * m.u["H+", x] * m.u["OH-", x] == 0
-
-
-m.water_diss_der2 = Constraint(m.x, rule=_water_diss_der2)
+# m.water_diss_der2 = Constraint(m.x, rule=_water_diss_der2)
 
 
 def _H2SO3_diss_der2(m, x):  # use Keq[H2SO3]
@@ -314,9 +274,7 @@ def _H2SO3_diss_der2(m, x):  # use Keq[H2SO3]
         m.v["H+", x] * m.c["HSO3-", x] + \
         m.c["H+", x] * m.v["HSO3-", x] + \
         2 * m.u["H+", x] * m.u["HSO3-", x]
-
-
-m.H2SO3_diss_der2 = Constraint(m.x, rule=_H2SO3_diss_der2)
+# m.H2SO3_diss_der2 = Constraint(m.x, rule=_H2SO3_diss_der2)
 
 
 def _HSO3_diss_der2(m, x):
@@ -330,9 +288,7 @@ def _HSO3_diss_der2(m, x):
         m.v["H+", x] * m.c["SO32-", x] + \
         m.c["H+", x] * m.v["SO32-", x] + \
         2 * m.c["H+", x] * m.u["SO32-", x]
-
-
-m.HSO3_diss_der2 = Constraint(m.x, rule=_HSO3_diss_der2)
+# m.HSO3_diss_der2 = Constraint(m.x, rule=_HSO3_diss_der2)
 
 
 def _HCO3_diss_der2(m, x):
@@ -346,9 +302,7 @@ def _HCO3_diss_der2(m, x):
         m.v["H+", x] * m.c["CO32-", x] + \
         m.c["H+", x] * m.v["CO32-", x] + \
         2 * m.u["H+", x] * m.u["CO32-", x]
-
-
-m.HCO3_diss_der2 = Constraint(m.x, rule=_HCO3_diss_der2)
+# m.HCO3_diss_der2 = Constraint(m.x, rule=_HCO3_diss_der2)
 
 
 def _CaSO3_diss_der2(m, x):
@@ -362,9 +316,7 @@ def _CaSO3_diss_der2(m, x):
         m.v["Ca2+", x] * m.c["SO32-", x] + \
         m.c["Ca2+", x] * m.v["SO32-", x] + \
         2 * m.u["Ca2+", x] * m.u["SO32-", x]
-
-
-m.CaSO3_diss_der2 = Constraint(m.x, rule=_CaSO3_diss_der2)
+# m.CaSO3_diss_der2 = Constraint(m.x, rule=_CaSO3_diss_der2)
 
 
 def _CaCO3_diss_der2(m, x):
@@ -378,9 +330,7 @@ def _CaCO3_diss_der2(m, x):
         m.v["Ca2+", x] * m.c["CO32-", x] + \
         m.c["Ca2+", x] * m.v["CO32-", x] + \
         2 * m.u["Ca2+", x] * m.u["CO32-", x]
-
-
-m.CaCO3_diss_der2 = Constraint(m.x, rule=_CaCO3_diss_der2)
+# m.CaCO3_diss_der2 = Constraint(m.x, rule=_CaCO3_diss_der2)
 
 
 def _CaHCO3_diss_der2(m, x):
@@ -394,9 +344,7 @@ def _CaHCO3_diss_der2(m, x):
         m.v["Ca2+", x] * m.c["HCO3-", x] + \
         m.c["Ca2+", x] * m.v["HCO3-", x] + \
         2 * m.u["Ca2+", x] * m.u["HCO3-", x]
-
-
-m.CaHCO3_diss_der2 = Constraint(m.x, rule=_CaHCO3_diss_der2)
+# m.CaHCO3_diss_der2 = Constraint(m.x, rule=_CaHCO3_diss_der2)
 
 
 # =============================================================================
@@ -412,9 +360,7 @@ def _reform_con(m, i, x):
             return m.u[i, x] == m.dcdx[i, x]
     else:
         return Constraint.Skip
-
-
-m.reform_con = Constraint(m.i, m.x, rule=_reform_con)
+# m.reform_con = Constraint(m.i, m.x, rule=_reform_con)
 
 
 #for comp in diff_vars:
@@ -436,9 +382,7 @@ def _reform_con_2(m, i, x):
             return m.u[i, x] == 0
         else:
             return m.dudx[i, x] == m.v[i, x]
-
-
-m.reform_con2 = Constraint(m.i, m.x, rule=_reform_con_2)
+# m.reform_con2 = Constraint(m.i, m.x, rule=_reform_con_2)
 
 
 # =============================================================================
@@ -461,9 +405,7 @@ def _sulfite(m, x):
         for k in sulfite_species:
             expr += m.Diff[k] * (m.v[k, x] - 2 / (x) * m.u[k, x])
         return expr == 0
-
-
-m.sulfite = Constraint(m.x, rule=_sulfite)
+# m.sulfite = Constraint(m.x, rule=_sulfite)
 
 
 def _carbonate(m, x):
@@ -477,9 +419,7 @@ def _carbonate(m, x):
             expr += m.Diff[k] * (m.v[k, x] - 2 / (x) * m.u[k, x])
         expr += m.rd_CaCO3[x]
         return expr == 0
-
-
-m.carbonate = Constraint(m.x, rule=_carbonate)
+# m.carbonate = Constraint(m.x, rule=_carbonate)
 
 
 def _calcium(m, x):
@@ -500,9 +440,7 @@ def _calcium(m, x):
             expr += m.Diff[k] * (m.v[k, x] - 2 / (x) * m.u[k, x])
         expr += m.rd_CaCO3[x]
         return expr == 0
-
-
-m.calcium = Constraint(m.x, rule=_calcium)
+# m.calcium = Constraint(m.x, rule=_calcium)
 
 
 def _carbondioxide(m, x):
@@ -518,9 +456,7 @@ def _carbondioxide(m, x):
         expr = m.Diff[k] * (m.v[k, x] - 2 / (x) * m.u[k, x])
         expr += m.r_CO2[x]
         return expr == 0
-
-
-m.carbondioxide = Constraint(m.x, rule=_carbondioxide)
+# m.carbondioxide = Constraint(m.x, rule=_carbondioxide)
 
 
 def _charge(m, x):
@@ -535,63 +471,77 @@ def _charge(m, x):
         expr = sum(m.z[k] * m.Diff[k] * (m.v[k, x] -
                    2 / (x) * m.u[k, x]) for k in charged_species)
         return expr == 0
-
-
-m.charge = Constraint(m.x, rule=_charge)
-
-
-# =============================================================================
-m.objective = Objective(expr=1, sense=minimize)
+# m.charge = Constraint(m.x, rule=_charge)
 
 
 # =============================================================================
-# discretizer = TransformationFactory("dae.finite_difference")
-# discretizer.apply_to(m, nfe=nfe, wrt=m.x, scheme="BACKWARD")
-discretizer = TransformationFactory("dae.collocation")
-discretizer.apply_to(m, nfe=nfe, ncp=3, wrt=m.x)
-
-# m.dudx["SO2", 0].fix(0.0)
-# m.dudx["CO2", 0].fix(0.0)
-m.dudx["SO2", r].fix(0.0)
-m.dudx["CO2", r].fix(0.0)
-for comp in diff_vars:
-    if comp == "CO2":
-        m.dcdx[comp, r].fix(1.0e-06)
-    else:
-        m.dcdx[comp, r].fix(0.0)
-
-
-#for comp in diff_vars:
-#    m.dcdx_disc_eq[comp, r].deactivate()
-#    m.dcdx_disc_eq.add([comp, 0], expr=(
-#            m.dcdx[comp, 0] == (m.c[comp, dx] - m.c[comp, 0]) / dx))
+def build_droplet_model(m):
+    # eqm constraints
+    m.water_diss = Constraint(m.x, rule=_water_diss)
+    m.H2SO3_diss = Constraint(m.x, rule=_H2SO3_diss)
+    m.HSO3_diss = Constraint(m.x, rule=_HSO3_diss)
+    m.HCO3_diss = Constraint(m.x, rule=_HCO3_diss)
+    m.CaSO3_diss = Constraint(m.x, rule=_CaSO3_diss)
+    m.CaCO3_diss = Constraint(m.x, rule=_CaCO3_diss)
+    m.CaHCO3_diss = Constraint(m.x, rule=_CaHCO3_diss)
     
+    # twice-diff constraints
+    m.water_diss_der2 = Constraint(m.x, rule=_water_diss_der2)
+    m.H2SO3_diss_der2 = Constraint(m.x, rule=_H2SO3_diss_der2)
+    m.HSO3_diss_der2 = Constraint(m.x, rule=_HSO3_diss_der2)
+    m.HCO3_diss_der2 = Constraint(m.x, rule=_HCO3_diss_der2)
+    m.CaSO3_diss_der2 = Constraint(m.x, rule=_CaSO3_diss_der2)
+    m.CaCO3_diss_der2 = Constraint(m.x, rule=_CaCO3_diss_der2)
+    m.CaHCO3_diss_der2 = Constraint(m.x, rule=_CaHCO3_diss_der2)
 
-# nlp = PyomoNLP(m)
-# x = nlp.create_vector_x()
-# x0 = nlp.x_init()
-## lam = nlp.create_vector_y()
+    # mass balance equations
+    m.sulfite = Constraint(m.x, rule=_sulfite)
+    m.carbonate = Constraint(m.x, rule=_carbonate)
+    m.calcium = Constraint(m.x, rule=_calcium)
+    m.carbondioxide = Constraint(m.x, rule=_carbondioxide)
+    m.charge = Constraint(m.x, rule=_charge)
+    
+    # reformulation constraints
+    m.reform_con = Constraint(m.i, m.x, rule=_reform_con)
+    m.reform_con2 = Constraint(m.i, m.x, rule=_reform_con_2)
+    
+    # objective
+    m.objective = Objective(expr=1, sense=minimize)
+    
+    
+    # =========================================================================
+    # dicretize
+    # discretizer = TransformationFactory("dae.finite_difference")
+    # discretizer.apply_to(m, nfe=nfe, wrt=m.x, scheme="BACKWARD")
+    discretizer = TransformationFactory("dae.collocation")
+    discretizer.apply_to(m, nfe=nfe, ncp=3, wrt=m.x)
 
-# Evaluate jacobian
-# jac_c = nlp.jacobian_g(x0)
-
-# m.dual = Suffix(direction=Suffix.IMPORT)
-
-opt = SolverFactory("ipopt")
-opt.options['linear_solver'] = 'MA27'
-opt.options['bound_push'] = 1e-05
-opt.options['mu_init'] = 1e-05
-opt.options['linear_system_scaling'] = 'mc19'
-#opt.options["nlp_scaling_method"] = "equilibration-based"
-#opt.options["output_file"] = "so2_abs_output.txt"
-opt.options["print_level"] = 5
-#opt.options["file_print_level"] = 7
-opt.options["bound_relax_factor"] = 1e-03
-opt.options["honor_original_bounds"] = "yes"
-#opt.options["max_iter"] = 1
+    # =========================================================================
+    # m.dudx["SO2", 0].fix(0.0)
+    # m.dudx["CO2", 0].fix(0.0)
+    m.dudx["SO2", r].fix(0.0)
+    m.dudx["CO2", r].fix(0.0)
+    for comp in diff_vars:
+        if comp == "CO2":
+            m.dcdx[comp, r].fix(1.0e-06)
+        else:
+            m.dcdx[comp, r].fix(0.0)
 
 
-if __name__ == '__main__':
+    # =========================================================================
+    opt = SolverFactory("ipopt")
+    opt.options['linear_solver'] = 'MA27'
+    opt.options['bound_push'] = 1e-05
+    opt.options['mu_init'] = 1e-05
+    opt.options['linear_system_scaling'] = 'mc19'
+    #opt.options["nlp_scaling_method"] = "equilibration-based"
+    #opt.options["output_file"] = "so2_abs_output.txt"
+    opt.options["print_level"] = 5
+    #opt.options["file_print_level"] = 7
+    opt.options["bound_relax_factor"] = 1e-03
+    opt.options["honor_original_bounds"] = "yes"
+    #opt.options["max_iter"] = 1
+
 
     # sb = TransformationFactory('contrib.strip_var_bounds')
     # sb.apply_to(m,reversible=True)
@@ -616,13 +566,13 @@ if __name__ == '__main__':
     # results = opt.solve(m, tee=True, load_solutions=True)
     
     
-    # =============================================================================
+    # =========================================================================
     # Stale vars
-    stale_dudx_vars = [comp for comp in m.dudx if m.dudx[comp[0], comp[1]].stale]
-    stale_dcdx_vars = [comp for comp in m.dcdx if m.dcdx[comp[0], comp[1]].stale]
+    # stale_dudx_vars = [comp for comp in m.dudx if m.dudx[comp[0], comp[1]].stale]
+    # stale_dcdx_vars = [comp for comp in m.dcdx if m.dcdx[comp[0], comp[1]].stale]
     
     
-    # =============================================================================
+    # =========================================================================
     plt.figure()
     plt.rc('text', usetex=True)
     plt.rc('font', family='serif')
