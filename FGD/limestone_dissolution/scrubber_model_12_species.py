@@ -49,11 +49,11 @@ m.x = ContinuousSet(initialize=x)
 
 # Axial coordinate
 z = 5  # [m]
-nfe_z = 10
+nfe_z = 1
 dz = round(z / nfe_z, decimals)
 z = round(dz * nfe_z, decimals)
 z = list(np.round(np.linspace(0, z, num=nfe_z+1), decimals=decimals))
-# m.z = ContinuousSet(initialize=z)
+m.z = ContinuousSet(initialize=z)
 
 # Species
 spc = [sp for sp in sp_all if sp != "CO2" and sp != "SO2"]
@@ -73,12 +73,17 @@ carbonate_species = [sp for sp in i if "CO" in sp]
 calcium_species = [sp for sp in i if "Ca" in sp]
 charged_species = [sp for sp in i if "+" in sp or "-" in sp]
 
+# Aggregated species
+j = ['sulfite', 'carbonate', 'calcium', 'charged', 'CO2']
+m.j = Set(initialize=j)
+
 
 # =============================================================================
 # Params
 # =============================================================================
 T = 25 + 273.15  # [K]
 R = 8.314        # [J/mol-K]
+up = 5           # [m/s]
 
 # Equilibrium constants (Radian corp. data, 1970)
 Keq_all = {sp: 10**(-vals[0] / T - vals[1] * np.log10(T) - vals[2] * T +
@@ -101,7 +106,7 @@ m.Diff = Param(m.i, rule=(lambda m, i: Diff[i]))
 
 # charge
 z_sp["CO2"], z_sp["SO2"] = 0, 0
-m.z = Param(m.i, rule=(lambda m, i: z_sp[i]))
+m.q = Param(m.i, rule=(lambda m, i: z_sp[i]))
 
 # partial pressures [Pa]  # Brogren & Karlsson
 p, p_i = {}, {}
@@ -127,7 +132,9 @@ m.u = Var(m.i, m.x, m.z, initialize=1e-06)
 m.v = Var(m.i, m.x, m.z, initialize=1e-03)
 m.dcdx = DerivativeVar(m.c, wrt=(m.x), initialize=1e-03)
 m.dudx = DerivativeVar(m.u, wrt=(m.x), initialize=0.0)
-m.dcdz = DerivativeVar(m.c, wrt=(m.z), initialize=1e-05)
+
+m.ctot = Var(m.j, m.x, m.z, initialize=1e-03)
+m.dctotdz = DerivativeVar(m.ctot, wrt=(m.z), initialize=1e-03)
 
 
 # =============================================================================
@@ -198,162 +205,143 @@ m.H_CO2 = Param(initialize=H_CO2)
 
 
 # =============================================================================
+# Aggregated concentrations
+def _ctot_sulfite(m, x, z):
+    return m.ctot['sulfite', x, z] == sum(m.c[k, x, z] for k in sulfite_species)
+m.ctot_sulfite = Constraint(m.x, m.z, rule=_ctot_sulfite)
+
+
+def _ctot_carbonate(m, x, z):
+    return m.ctot['carbonate', x, z] == sum(m.c[k, x, z] for k in carbonate_species)
+m.ctot_carbonate = Constraint(m.x, m.z, rule=_ctot_carbonate)
+
+
+def _ctot_calcium(m, x, z):
+    return m.ctot['calcium', x, z] == sum(m.c[k, x, z] for k in calcium_species)
+m.ctot_calcium = Constraint(m.x, m.z, rule=_ctot_calcium)
+
+
+def _ctot_charged(m, x, z):
+    return m.ctot['charged', x, z] == sum(m.c[k, x, z] for k in charged_species)
+m.ctot_charged = Constraint(m.x, m.z, rule=_ctot_charged)
+
+
+def _ctot_co2(m, x, z):
+    return m.ctot['CO2', x, z] == m.c['CO2', x, z]
+m.ctot_co2 = Constraint(m.x, m.z, rule=_ctot_co2)
+
+
+# =============================================================================
 # Equilibrium reactions
 def _water_diss(m, x, z):
     return m.c["H+", x, z] * m.c["OH-", x, z] == m.Kw
-m.water_diss = Constraint(m.x, rule=_water_diss)
+m.water_diss = Constraint(m.x, m.z, rule=_water_diss)
 
 
 def _H2SO3_diss(m, x, z):  # use Keq[H2SO3]
     return m.Keq["SO2"] * m.c["SO2", x, z] == m.c["H+", x, z] * m.c["HSO3-", x, z]
-m.H2SO3_diss = Constraint(m.x, rule=_H2SO3_diss)
+m.H2SO3_diss = Constraint(m.x, m.z, rule=_H2SO3_diss)
 
 
 def _HSO3_diss(m, x, z):
     return m.Keq["HSO3-"] * m.c["HSO3-", x, z] == m.c["H+", x, z] * m.c["SO32-", x, z]
-m.HSO3_diss = Constraint(m.x, rule=_HSO3_diss)
+m.HSO3_diss = Constraint(m.x, m.z, rule=_HSO3_diss)
 
 
 def _HCO3_diss(m, x, z):
     return m.Keq["HCO3-"] * m.c["HCO3-", x, z] == m.c["H+", x, z] * m.c["CO32-", x, z]
-m.HCO3_diss = Constraint(m.x, rule=_HCO3_diss)
+m.HCO3_diss = Constraint(m.x, m.z, rule=_HCO3_diss)
 
 
 def _CaSO3_diss(m, x, z):
     return m.Keq["CaSO3"] * m.c["CaSO3", x, z] == m.c["Ca2+", x, z] * m.c["SO32-", x, z]
-m.CaSO3_diss = Constraint(m.x, rule=_CaSO3_diss)
+m.CaSO3_diss = Constraint(m.x, m.z, rule=_CaSO3_diss)
 
 
 def _CaCO3_diss(m, x, z):
     return m.Keq["CaCO3"] * m.c["CaCO3", x, z] == m.c["Ca2+", x, z] * m.c["CO32-", x, z]
-m.CaCO3_diss = Constraint(m.x, rule=_CaCO3_diss)
+m.CaCO3_diss = Constraint(m.x, m.z, rule=_CaCO3_diss)
 
 
 def _CaHCO3_diss(m, x, z):
     return m.Keq["CaHCO3+"] * m.c["CaHCO3+", x, z] == m.c["Ca2+", x, z] * m.c["HCO3-", x, z]
-m.CaHCO3_diss = Constraint(m.x, rule=_CaHCO3_diss)
+m.CaHCO3_diss = Constraint(m.x, m.z, rule=_CaHCO3_diss)
 
 
 # =============================================================================
 # Twice-differentiated equations
 def _water_diss_der2(m, x, z):
-#    if x == 0:
-##        return (m.u["H+", x+dx] - m.u["H+", x]) / dx * m.c["OH-", x] + \
-##            m.c["H+", x] * (m.u["OH-", x+dx] - m.u["OH-", x]) / dx + \
-##            2 * m.u["H+", x] * m.u["OH-", x] == 0
-#    else:
     return m.v["H+", x, z] * m.c["OH-", x, z] + \
         m.c["H+", x, z] * m.v["OH-", x, z] + \
         2 * m.u["H+", x, z] * m.u["OH-", x, z] == 0
-m.water_diss_der2 = Constraint(m.x, rule=_water_diss_der2)
+m.water_diss_der2 = Constraint(m.x, m.z, rule=_water_diss_der2)
 
 
 def _H2SO3_diss_der2(m, x, z):  # use Keq[H2SO3]
-#    if x == r:  # SURFACE CONDITION FOR SO2!
-##    if x == 0:
-##        return m.Keq["SO2"] * (m.u["SO2", x+dx] - m.u["SO2", x]) / dx == \
-##            (m.u["H+", x+dx] - m.u["H+", x]) / dx * m.c["HSO3-", x] + \
-##            m.c["H+", x] * (m.u["HSO3-", x+dx] - m.u["HSO3-", x]) / dx + \
-##            2 * m.u["H+", x] * m.u["HSO3-", x]
-#    else:
     return m.Keq["SO2"] * m.v["SO2", x, z] == \
         m.v["H+", x, z] * m.c["HSO3-", x, z] + \
         m.c["H+", x, z] * m.v["HSO3-", x, z] + \
         2 * m.u["H+", x, z] * m.u["HSO3-", x, z]
-m.H2SO3_diss_der2 = Constraint(m.x, rule=_H2SO3_diss_der2)
+m.H2SO3_diss_der2 = Constraint(m.x, m.z, rule=_H2SO3_diss_der2)
 
 
 def _HSO3_diss_der2(m, x, z):
-#    if x == 0:
-##        return m.Keq["HSO3-"] * (m.u["HSO3-", x+dx] - m.u["HSO3-", x]) / dx == \
-##            (m.u["H+", x+dx] - m.u["H+", x]) / dx * m.c["SO32-", x] + \
-##            m.c["H+", x] * (m.u["SO32-", x+dx] - m.u["SO32-", x]) / dx + \
-##            2 * m.c["H+", x] * m.u["SO32-", x]
-#    else:
     return m.Keq["HSO3-"] * m.v["HSO3-", x, z] == \
         m.v["H+", x, z] * m.c["SO32-", x, z] + \
         m.c["H+", x, z] * m.v["SO32-", x, z] + \
         2 * m.c["H+", x, z] * m.u["SO32-", x, z]
-m.HSO3_diss_der2 = Constraint(m.x, rule=_HSO3_diss_der2)
+m.HSO3_diss_der2 = Constraint(m.x, m.z, rule=_HSO3_diss_der2)
 
 
 def _HCO3_diss_der2(m, x, z):
-#    if x == 0:
-##        return m.Keq["HCO3-"] * (m.u["HCO3-", x+dx] - m.u["HCO3-", x]) / dx == \
-##            (m.u["H+", x+dx] - m.u["H+", x]) / dx * m.c["CO32-", x] + \
-##            m.c["H+", x] * (m.u["CO32-", x+dx] - m.u["CO32-", x]) / dx + \
-##            2 * m.u["H+", x] * m.u["CO32-", x]
-#    else:
     return m.Keq["HCO3-"] * m.v["HCO3-", x, z] == \
         m.v["H+", x, z] * m.c["CO32-", x, z] + \
         m.c["H+", x, z] * m.v["CO32-", x, z] + \
         2 * m.u["H+", x, z] * m.u["CO32-", x, z]
-m.HCO3_diss_der2 = Constraint(m.x, rule=_HCO3_diss_der2)
+m.HCO3_diss_der2 = Constraint(m.x, m.z, rule=_HCO3_diss_der2)
 
 
 def _CaSO3_diss_der2(m, x, z):
-#    if x == 0:
-##        return m.Keq["CaSO3"] * (m.u["CaSO3", x+dx] - m.u["CaSO3", x]) / dx == \
-##            (m.u["Ca2+", x+dx] - m.u["Ca2+", x]) / dx * m.c["SO32-", x] + \
-##            m.c["Ca2+", x] * (m.u["SO32-", x+dx] - m.u["SO32-", x]) / dx + \
-##            2 * m.u["Ca2+", x] * m.u["SO32-", x]
-#    else:
     return m.Keq["CaSO3"] * m.v["CaSO3", x, z] == \
         m.v["Ca2+", x, z] * m.c["SO32-", x, z] + \
         m.c["Ca2+", x, z] * m.v["SO32-", x, z] + \
         2 * m.u["Ca2+", x, z] * m.u["SO32-", x, z]
-m.CaSO3_diss_der2 = Constraint(m.x, rule=_CaSO3_diss_der2)
+m.CaSO3_diss_der2 = Constraint(m.x, m.z, rule=_CaSO3_diss_der2)
 
 
 def _CaCO3_diss_der2(m, x, z):
-#    if x == 0:
-##        return m.Keq["CaCO3"] * (m.u["CaCO3", x+dx] - m.u["CaCO3", x]) / dx == \
-##            (m.u["Ca2+", x+dx] - m.u["Ca2+", x]) / dx * m.c["CO32-", x] + \
-##            m.c["Ca2+", x] * (m.u["CO32-", x+dx] - m.u["CO32-", x]) / dx + \
-##            2 * m.u["Ca2+", x] * m.u["CO32-", x]
-#    else:
     return m.Keq["CaCO3"] * m.v["CaCO3", x, z] == \
         m.v["Ca2+", x, z] * m.c["CO32-", x, z] + \
         m.c["Ca2+", x, z] * m.v["CO32-", x, z] + \
         2 * m.u["Ca2+", x, z] * m.u["CO32-", x, z]
-m.CaCO3_diss_der2 = Constraint(m.x, rule=_CaCO3_diss_der2)
+m.CaCO3_diss_der2 = Constraint(m.x, m.z, rule=_CaCO3_diss_der2)
 
 
 def _CaHCO3_diss_der2(m, x, z):
-#    if x == 0:
-##        return m.Keq["CaHCO3+"] * (m.u["CaHCO3+", x+dx] - m.u["CaHCO3+", x]) / dx == \
-##            (m.u["Ca2+", x+dx] - m.u["Ca2+", x]) / dx * m.c["HCO3-", x] + \
-##            m.c["Ca2+", x] * (m.u["HCO3-", x+dx] - m.u["HCO3-", x]) / dx + \
-##            2 * m.u["Ca2+", x] * m.u["HCO3-", x]
-#    else:
     return m.Keq["CaHCO3+"] * m.v["CaHCO3+", x, z] == \
         m.v["Ca2+", x, z] * m.c["HCO3-", x, z] + \
         m.c["Ca2+", x, z] * m.v["HCO3-", x, z] + \
         2 * m.u["Ca2+", x, z] * m.u["HCO3-", x, z]
-m.CaHCO3_diss_der2 = Constraint(m.x, rule=_CaHCO3_diss_der2)
+m.CaHCO3_diss_der2 = Constraint(m.x, m.z, rule=_CaHCO3_diss_der2)
 
 
 # =============================================================================
 # Define u = dcdx
 def _reform_con(m, i, x, z):
     if i in diff_vars:
-#        if x == 0:  # r for ????
         if x == r:
-#            return (m.c[i, x+dx] - m.c[i, x]) / dx == 0.0
             return m.c[i, x, z] == 0.0005
-#            return (m.c[i, x] - m.c[i, x-dx]) / dx == 0.0
         else:
             return m.u[i, x, z] == m.dcdx[i, x, z]
     else:
         return Constraint.Skip
-m.reform_con = Constraint(m.i, m.x, rule=_reform_con)
+m.reform_con = Constraint(m.i, m.x, m.z, rule=_reform_con)
 
 
 # =============================================================================
 # Define dudx = v
 def _reform_con_2(m, i, x, z):
     if i == "SO2" or i == "CO2":
-#        if x == 0:
         if x == r:
             return m.u[i, x, z] == kG[i] * (p[i] - p_i[i])
         else:
@@ -363,96 +351,80 @@ def _reform_con_2(m, i, x, z):
             return m.u[i, x, z] == 0
         else:
             return m.dudx[i, x, z] == m.v[i, x, z]
-m.reform_con2 = Constraint(m.i, m.x, rule=_reform_con_2)
+m.reform_con2 = Constraint(m.i, m.x, m.z, rule=_reform_con_2)
 
 
 # =============================================================================
 # Combined mass balances [FIX x==r boundary case]
-def _sulfite(m, x):
-    # "CaSO3", "HSO3-", "SO32-", "SO2", "MgSO3"
-#    if x == 0:
-#        return m.u["CaSO3", x] == 0
-#    else:
-#        expr = 0
-#        for k in ["SO2", "HSO3-", "SO32-", "CaSO3", "MgSO3"]:
-#            expr += m.Diff[k] * (m.dudx[k, x] - 2 / (x, z) * m.u[k, x])
-#        return expr == 0
-#    if x == r:
-    if x == 0:
-        return m.u["CaSO3", x, z] == 0
-#        return Constraint.Skip
+def _sulfite(m, x, z):
+    if z == 0:
+        return m.ctot['sulfite', x, z] == 5e-04
     else:
-        expr = 0
-        for k in sulfite_species:
-            expr += m.Diff[k] * (m.v[k, x, z] - 2 / (x) * m.u[k, x, z])
-        return expr == 0
-m.sulfite = Constraint(m.x, rule=_sulfite)
+        if x == 0:
+            return m.u["CaSO3", x, z] == 0
+        else:
+            expr = 0
+            for k in sulfite_species:
+                expr += m.Diff[k] * (m.v[k, x, z] - 2 / (x) * m.u[k, x, z])
+            return expr == up * m.dctotdz['sulfite', x, z]
+m.sulfite = Constraint(m.x, m.z, rule=_sulfite)
 
 
 def _carbonate(m, x, z):
-#    if x == r:
-    if x == 0:
-        return m.u["CaHCO3+", x, z] == 0
-#        return Constraint.Skip
+    if z == 0:
+        return m.ctot['carbonate', x, z] == 2e-03
     else:
-        expr = 0
-        for k in carbonate_species:
-            expr += m.Diff[k] * (m.v[k, x, z] - 2 / (x) * m.u[k, x, z])
-        expr += m.rd_CaCO3[x, z]
-        return expr == 0
-m.carbonate = Constraint(m.x, rule=_carbonate)
+        if x == 0:
+            return m.u["CaHCO3+", x, z] == 0
+        else:
+            expr = 0
+            for k in carbonate_species:
+                expr += m.Diff[k] * (m.v[k, x, z] - 2 / (x) * m.u[k, x, z])
+            expr += m.rd_CaCO3[x, z]
+            return expr == up * m.dctotdz['carbonate', x, z]
+m.carbonate = Constraint(m.x, m.z, rule=_carbonate)
 
 
 def _calcium(m, x, z):
-#    if x == r:
-    if x == 0:
-        return m.u["CaCO3", x, z] == 0
-#        return Constraint.Skip
-#        expr = sum((m.c[k, x+dx] - m.c[k, x]) / dx for k in
-#                   ["Ca2+", "CaSO3", "CaCO3", "CaHCO3+", "CaSO4"])
-#        return expr == 0
-#    if x == r:
-#        return sum(m.J[k, x] for k in
-#                   ["Ca2+", "CaSO3", "CaCO3", "CaHCO3+", "CaSO4"]) == 0
+    if z == 0:
+        return m.ctot['calcium', x, z] == 0.12
     else:
-        expr = 0
-        for k in calcium_species:
-#        for k in ["Ca2+", "CaSO3", "CaCO3"]:
-            expr += m.Diff[k] * (m.v[k, x, z] - 2 / (x) * m.u[k, x, z])
-        expr += m.rd_CaCO3[x, z]
-        return expr == 0
-m.calcium = Constraint(m.x, rule=_calcium)
+        if x == 0:
+            return m.u["CaCO3", x, z] == 0
+        else:
+            expr = 0
+            for k in calcium_species:
+                expr += m.Diff[k] * (m.v[k, x, z] - 2 / (x) * m.u[k, x, z])
+            expr += m.rd_CaCO3[x, z]
+            return expr == up * m.dctotdz['calcium', x, z]
+m.calcium = Constraint(m.x, m.z, rule=_calcium)
 
 
 def _carbondioxide(m, x, z):
-    k = "CO2"
-#    if x == 0:
-#        return (m.c[k, x+dx] - m.c[k, x]) / dx == 0
-#    if x == r:
-    if x == 0:
-        return m.u[k, x, z] == kG[k] * (m.p[k] - m.p_i[k])
-#        return Constraint.Skip
-#        return m.H_CO2 * m.c[k, x] == m.p[k]
+    k = 'CO2'
+    if z == 0:
+        return m.c[k, x, z] == 2e-03
     else:
-        expr = m.Diff[k] * (m.v[k, x, z] - 2 / (x) * m.u[k, x, z])
-        expr += m.r_CO2[x, z]
-        return expr == 0
-m.carbondioxide = Constraint(m.x, rule=_carbondioxide)
+        if x == 0:
+            return m.u[k, x, z] == kG[k] * (m.p[k] - m.p_i[k])
+        else:
+            expr = m.Diff[k] * (m.v[k, x, z] - 2 / (x) * m.u[k, x, z])
+            expr += m.r_CO2[x, z]
+            return expr == up * m.dctotdz[k, x, z]
+m.carbondioxide = Constraint(m.x, m.z, rule=_carbondioxide)
 
 
 def _charge(m, x, z):
-#    if x == r:
-    if x == 0:
-        return m.u["H+", x, z] == 0
-#        return Constraint.Skip
-#        return sum((m.c[k, x+dx] - m.c[k, x]) / dx for k in m.i) == 0
-#    if x == r:
-#        return sum(m.J[k, x] for k in m.i) == 0
+    if z == 0:
+        return m.ctot['charged', x, z] == 1e-01
     else:
-        expr = sum(m.z[k] * m.Diff[k] * (m.v[k, x, z] -
-                   2 / (x) * m.u[k, x, z]) for k in charged_species)
-        return expr == 0
-m.charge = Constraint(m.x, rule=_charge)
+        if x == 0:
+            return m.u['H+', x, z] == 0
+        else:
+            expr = sum(m.q[k] * m.Diff[k] * (m.v[k, x, z] -
+                       2 / (x) * m.u[k, x, z]) for k in charged_species)
+            return expr == up * m.dctotdz['charged', x, z]
+m.charge = Constraint(m.x, m.z, rule=_charge)
 
 
 # =============================================================================
@@ -494,21 +466,26 @@ m.objective = Objective(expr=1, sense=minimize)
 
 # =============================================================================
 # dicretize
-# discretizer = TransformationFactory("dae.finite_difference")
-# discretizer.apply_to(m, nfe=nfe_r, wrt=m.x, scheme="BACKWARD")
-discretizer = TransformationFactory("dae.collocation")
-discretizer.apply_to(m, nfe=nfe_r, ncp=3, wrt=m.x)
+discretizer1 = TransformationFactory("dae.collocation")
+discretizer1.apply_to(m, nfe=nfe_r, ncp=3, wrt=m.x)
+discretizer2 = TransformationFactory("dae.finite_difference")
+discretizer2.apply_to(m, nfe=nfe_z, wrt=m.z, scheme="BACKWARD")
+# discretizer2 = TransformationFactory("dae.collocation")
+# discretizer2.apply_to(m, nfe=nfe_z, ncp=3, wrt=m.z)
+
 
 # =============================================================================
 # m.dudx["SO2", 0].fix(0.0)
 # m.dudx["CO2", 0].fix(0.0)
-m.dudx["SO2", r].fix(0.0)
-m.dudx["CO2", r].fix(0.0)
-for comp in diff_vars:
-    if comp == "CO2":
-        m.dcdx[comp, r].fix(1.0e-06)
-    else:
-        m.dcdx[comp, r].fix(0.0)
+# for z_ in m.z:
+#     m.dudx["SO2", r, z_].fix(0.0)
+#     m.dudx["CO2", r, z_].fix(0.0)
+# for comp in diff_vars:
+#     for z_ in m.z:
+#         if comp == "CO2":
+#             m.dcdx[comp, r, z_].fix(1.0e-06)
+#         else:
+#             m.dcdx[comp, r, z_].fix(0.0)
 
 
 # =============================================================================
@@ -556,28 +533,28 @@ if (results.solver.termination_condition == TerminationCondition.infeasible or
     
     
 # =============================================================================
-plt.figure()
-plt.rc('text', usetex=True)
-plt.rc('font', family='serif')
-# plt.rc('xtick', labelsize=20) 
-# plt.rc('ytick', labelsize=20)
-# plt.rc('axes', labelsize=25)    # fontsize of the x and y labels
-plt.plot(list(m.x), [value(m.c["SO2", x_]) for x_ in list(m.x)])
-plt.xlabel(r'\Large Radial coordinate [m] (center --$>$ surface)')
-plt.ylabel(r'\Large SO$_2$ Concentration [M]')
-plt.xlim([0.0, r])
-plt.grid()
-plt.tight_layout()
+# plt.figure()
+# plt.rc('text', usetex=True)
+# plt.rc('font', family='serif')
+# # plt.rc('xtick', labelsize=20) 
+# # plt.rc('ytick', labelsize=20)
+# # plt.rc('axes', labelsize=25)    # fontsize of the x and y labels
+# plt.plot(list(m.x), [value(m.c["SO2", x_]) for x_ in list(m.x)])
+# plt.xlabel(r'\Large Radial coordinate [m] (center --$>$ surface)')
+# plt.ylabel(r'\Large SO$_2$ Concentration [M]')
+# plt.xlim([0.0, r])
+# plt.grid()
+# plt.tight_layout()
 
 
-plt.figure()
-plt.plot(list(m.x), [value(m.c["CaCO3", x_]) for x_ in list(m.x)])
-plt.xlabel(r'\Large Radial coordinate (center --$>$ surface)')
-plt.ylabel(r'\Large CaCO$_3$ Concentration [M]')
-plt.xlim([0.0, r])
-plt.grid()
-plt.tight_layout()
+# plt.figure()
+# plt.plot(list(m.x), [value(m.c["CaCO3", x_]) for x_ in list(m.x)])
+# plt.xlabel(r'\Large Radial coordinate (center --$>$ surface)')
+# plt.ylabel(r'\Large CaCO$_3$ Concentration [M]')
+# plt.xlim([0.0, r])
+# plt.grid()
+# plt.tight_layout()
 
-print("delta C[SO2] =", m.c["SO2", r]() - m.c["SO2", 0]())
-print("C[SO2] at the surface =", m.c["SO2", r]())
+# print("delta C[SO2] =", m.c["SO2", r]() - m.c["SO2", 0]())
+# print("C[SO2] at the surface =", m.c["SO2", r]())
 #"""

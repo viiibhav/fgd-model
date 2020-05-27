@@ -359,9 +359,8 @@ def _reform_con(m, i, x):
     if i in diff_vars:
 #        if x == 0:  # r for ????
         if x == r:
-#            return (m.c[i, x+dx] - m.c[i, x]) / dx == 0.0
             return m.c[i, x] == 0.0005
-#            return (m.c[i, x] - m.c[i, x-dx]) / dx == 0.0
+            # return m.u[i, x] == 0
         else:
             return m.u[i, x] == m.dcdx[i, x]
     else:
@@ -394,18 +393,8 @@ m.reform_con2 = Constraint(m.i, m.x, rule=_reform_con_2)
 # =============================================================================
 # Combined mass balances [FIX x==r boundary case]
 def _sulfite(m, x):
-    # "CaSO3", "HSO3-", "SO32-", "SO2", "MgSO3"
-#    if x == 0:
-#        return m.u["CaSO3", x] == 0
-#    else:
-#        expr = 0
-#        for k in ["SO2", "HSO3-", "SO32-", "CaSO3", "MgSO3"]:
-#            expr += m.Diff[k] * (m.dudx[k, x] - 2 / (x) * m.u[k, x])
-#        return expr == 0
-#    if x == r:
-    if x == 0:
+    if x == 0:# or x == r:
         return m.u["CaSO3", x] == 0
-#        return Constraint.Skip
     else:
         expr = 0
         for k in sulfite_species:
@@ -415,10 +404,8 @@ m.sulfite = Constraint(m.x, rule=_sulfite)
 
 
 def _carbonate(m, x):
-#    if x == r:
-    if x == 0:
+    if x == 0:# or x == r:
         return m.u["CaHCO3+", x] == 0
-#        return Constraint.Skip
     else:
         expr = 0
         for k in carbonate_species:
@@ -429,20 +416,11 @@ m.carbonate = Constraint(m.x, rule=_carbonate)
 
 
 def _calcium(m, x):
-#    if x == r:
-    if x == 0:
+    if x == 0:# or x == r:
         return m.u["CaCO3", x] == 0
-#        return Constraint.Skip
-#        expr = sum((m.c[k, x+dx] - m.c[k, x]) / dx for k in
-#                   ["Ca2+", "CaSO3", "CaCO3", "CaHCO3+", "CaSO4"])
-#        return expr == 0
-#    if x == r:
-#        return sum(m.J[k, x] for k in
-#                   ["Ca2+", "CaSO3", "CaCO3", "CaHCO3+", "CaSO4"]) == 0
     else:
         expr = 0
         for k in calcium_species:
-#        for k in ["Ca2+", "CaSO3", "CaCO3"]:
             expr += m.Diff[k] * (m.v[k, x] - 2 / (x) * m.u[k, x])
         expr += m.rd_CaCO3[x]
         return expr == 0
@@ -451,13 +429,8 @@ m.calcium = Constraint(m.x, rule=_calcium)
 
 def _carbondioxide(m, x):
     k = "CO2"
-#    if x == 0:
-#        return (m.c[k, x+dx] - m.c[k, x]) / dx == 0
-#    if x == r:
-    if x == 0:
+    if x == 0:# or x == r:
         return m.u[k, x] == kG[k] * (m.p[k] - m.p_i[k])
-#        return Constraint.Skip
-#        return m.H_CO2 * m.c[k, x] == m.p[k]
     else:
         expr = m.Diff[k] * (m.v[k, x] - 2 / (x) * m.u[k, x])
         expr += m.r_CO2[x]
@@ -466,51 +439,14 @@ m.carbondioxide = Constraint(m.x, rule=_carbondioxide)
 
 
 def _charge(m, x):
-#    if x == r:
-    if x == 0:
+    if x == 0:# or x == r:
         return m.u["H+", x] == 0
-#        return Constraint.Skip
-#        return sum((m.c[k, x+dx] - m.c[k, x]) / dx for k in m.i) == 0
-#    if x == r:
-#        return sum(m.J[k, x] for k in m.i) == 0
     else:
         expr = sum(m.z[k] * m.Diff[k] * (m.v[k, x] -
                    2 / (x) * m.u[k, x]) for k in charged_species)
         return expr == 0
 m.charge = Constraint(m.x, rule=_charge)
 
-
-# =============================================================================
-# def build_droplet_model(m):
-#     # eqm constraints
-#     m.water_diss = Constraint(m.x, rule=_water_diss)
-#     m.H2SO3_diss = Constraint(m.x, rule=_H2SO3_diss)
-#     m.HSO3_diss = Constraint(m.x, rule=_HSO3_diss)
-#     m.HCO3_diss = Constraint(m.x, rule=_HCO3_diss)
-#     m.CaSO3_diss = Constraint(m.x, rule=_CaSO3_diss)
-#     m.CaCO3_diss = Constraint(m.x, rule=_CaCO3_diss)
-#     m.CaHCO3_diss = Constraint(m.x, rule=_CaHCO3_diss)
-    
-#     # twice-diff constraints
-#     m.water_diss_der2 = Constraint(m.x, rule=_water_diss_der2)
-#     m.H2SO3_diss_der2 = Constraint(m.x, rule=_H2SO3_diss_der2)
-#     m.HSO3_diss_der2 = Constraint(m.x, rule=_HSO3_diss_der2)
-#     m.HCO3_diss_der2 = Constraint(m.x, rule=_HCO3_diss_der2)
-#     m.CaSO3_diss_der2 = Constraint(m.x, rule=_CaSO3_diss_der2)
-#     m.CaCO3_diss_der2 = Constraint(m.x, rule=_CaCO3_diss_der2)
-#     m.CaHCO3_diss_der2 = Constraint(m.x, rule=_CaHCO3_diss_der2)
-
-#     # mass balance equations
-#     m.sulfite = Constraint(m.x, rule=_sulfite)
-#     m.carbonate = Constraint(m.x, rule=_carbonate)
-#     m.calcium = Constraint(m.x, rule=_calcium)
-#     m.carbondioxide = Constraint(m.x, rule=_carbondioxide)
-#     m.charge = Constraint(m.x, rule=_charge)
-    
-#     # reformulation constraints
-#     m.reform_con = Constraint(m.i, m.x, rule=_reform_con)
-#     m.reform_con2 = Constraint(m.i, m.x, rule=_reform_con_2)
-    
 
 # =============================================================================
 # objective
@@ -522,11 +458,9 @@ m.objective = Objective(expr=1, sense=minimize)
 # discretizer = TransformationFactory("dae.finite_difference")
 # discretizer.apply_to(m, nfe=nfe, wrt=m.x, scheme="BACKWARD")
 discretizer = TransformationFactory("dae.collocation")
-discretizer.apply_to(m, nfe=nfe, ncp=3, wrt=m.x)
+discretizer.apply_to(m, nfe=nfe, ncp=3, wrt=m.x)#, scheme='LAGRANGE-LEGENDRE')
 
 # =============================================================================
-# m.dudx["SO2", 0].fix(0.0)
-# m.dudx["CO2", 0].fix(0.0)
 m.dudx["SO2", r].fix(0.0)
 m.dudx["CO2", r].fix(0.0)
 for comp in diff_vars:
@@ -534,6 +468,16 @@ for comp in diff_vars:
         m.dcdx[comp, r].fix(1.0e-06)
     else:
         m.dcdx[comp, r].fix(0.0)
+
+# m.write(filename='droplet_before_fixing.nl', format=ProblemFormat.nl,
+#         io_options={'symbolic_solver_labels':True})
+
+# for comp in m.i:
+#     m.dcdx[comp, r].fix(1.0e-06)
+#     if comp == 'CO2' or comp == 'SO2':
+#         m.dudx[comp, r].fix(0.0)
+#     else:
+#         m.dudx[comp, 0].fix(0.0)
 
 
 # =============================================================================
@@ -553,6 +497,8 @@ opt.options["honor_original_bounds"] = "yes"
 
 # sb = TransformationFactory('contrib.strip_var_bounds')
 # sb.apply_to(m,reversible=True)
+# m.write(filename='droplet_after_fixing.nl', format=ProblemFormat.nl,
+#         io_options={'symbolic_solver_labels':True})
 results = opt.solve(m, tee=True)
 
 if (results.solver.termination_condition == TerminationCondition.infeasible or
@@ -569,16 +515,17 @@ if (results.solver.termination_condition == TerminationCondition.infeasible or
             opt.options['mu_init'] *= 10
 
 # sb.revert(m)
-# m.write(filename="so2_abs_reform.nl", format=ProblemFormat.nl)
-
 # results = opt.solve(m, tee=True, load_solutions=True)
 
 
 # =============================================================================
-# Stale vars
-# stale_dudx_vars = [comp for comp in m.dudx if m.dudx[comp[0], comp[1]].stale]
-# stale_dcdx_vars = [comp for comp in m.dcdx if m.dcdx[comp[0], comp[1]].stale]
-    
+# Analyze pyomo vars and constraints
+nvars = {comp.name: len(comp) for comp in m.component_objects(ctype=[Var])}
+ncons = {comp.name: len(comp) for comp in m.component_objects(ctype=[Constraint])}
+
+stale_dcdx_vars = [comp for comp in m.dcdx if m.dcdx[comp[0], comp[1]].stale]
+stale_dudx_vars = [comp for comp in m.dudx if m.dudx[comp[0], comp[1]].stale]
+
     
 # =============================================================================
 plt.figure()
@@ -603,6 +550,7 @@ plt.title(r'Concentration profile of CaCO$_3$ inside the droplet')
 plt.xlim([0.0, r])
 plt.tight_layout()
 
+print()
 print("delta C[SO2] =", m.c["SO2", r]() - m.c["SO2", 0]())
 print("C[SO2] at the surface =", m.c["SO2", r]())
 #"""
