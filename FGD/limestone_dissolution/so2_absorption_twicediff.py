@@ -16,7 +16,7 @@ from pyomo.environ import (ConcreteModel, Set, Param, Var,
 from pyomo.opt import (SolverFactory, SolverStatus, TerminationCondition,
                        ProblemFormat)
 from pyomo.dae import DerivativeVar, ContinuousSet
-from pyomo.contrib.pynumero.interfaces import PyomoNLP
+# from pyomo.contrib.pynumero.interfaces import PyomoNLP
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -334,97 +334,6 @@ def _MgSO4_diss(m, x):
 
 
 m.MgSO4_diss = Constraint(m.x, rule=_MgSO4_diss)
-
-
-# =============================================================================
-# Differentiated equations
-"""
-def _water_diss_der(m, x):
-    return m.u["H+", x] * m.c["OH-", x] + m.c["H+", x] * m.u["OH-", x] == 0
-
-
-m.water_diss_der = Constraint(m.x, rule=_water_diss_der)
-
-
-def _H2SO3_diss_der(m, x):  # use Keq[H2SO3]
-    return m.Keq["SO2"] * m.u["SO2", x] == \
-        m.u["H+", x] * m.c["HSO3-", x] + m.c["H+", x] * m.u["HSO3-", x]
-
-
-m.H2SO3_diss_der = Constraint(m.x, rule=_H2SO3_diss_der)
-
-
-def _HSO3_diss_der(m, x):
-    return m.Keq["HSO3-"] * m.u["HSO3-", x] == \
-        m.u["H+", x] * m.c["SO32-", x] + m.c["H+", x] * m.u["SO32-", x]
-
-
-m.HSO3_diss_der = Constraint(m.x, rule=_HSO3_diss_der)
-
-
-def _HCO3_diss_der(m, x):
-    return m.Keq["HCO3-"] * m.u["HCO3-", x] == \
-        m.u["H+", x] * m.c["CO32-", x] + m.c["H+", x] * m.u["CO32-", x]
-
-
-m.HCO3_diss_der = Constraint(m.x, rule=_HCO3_diss_der)
-
-
-def _CaSO3_diss_der(m, x):
-    return m.Keq["CaSO3"] * m.u["CaSO3", x] == \
-        m.u["Ca2+", x] * m.c["SO32-", x] + m.c["Ca2+", x] * m.u["SO32-", x]
-
-
-m.CaSO3_diss_der = Constraint(m.x, rule=_CaSO3_diss_der)
-
-
-def _CaCO3_diss_der(m, x):
-    return m.Keq["CaCO3"] * m.u["CaCO3", x] == \
-        m.u["Ca2+", x] * m.c["CO32-", x] + m.c["Ca2+", x] * m.u["CO32-", x]
-
-
-m.CaCO3_diss_der = Constraint(m.x, rule=_CaCO3_diss_der)
-
-
-def _CaHCO3_diss_der(m, x):
-    return m.Keq["CaHCO3+"] * m.u["CaHCO3+", x] == \
-           m.u["Ca2+", x] * m.c["HCO3-", x] + m.c["Ca2+", x] * m.u["HCO3-", x]
-
-
-m.CaHCO3_diss_der = Constraint(m.x, rule=_CaHCO3_diss_der)
-
-
-def _CaSO4_diss_der(m, x):
-    return m.Keq["CaSO4"] * m.u["CaSO4", x] == \
-        m.u["Ca2+", x] * m.c["SO42-", x] + m.c["Ca2+", x] * m.u["SO42-", x]
-
-
-m.CaSO4_diss_der = Constraint(m.x, rule=_CaSO4_diss_der)
-
-
-def _MgSO3_diss_der(m, x):
-    return m.Keq["MgSO3"] * m.u["MgSO3", x] == \
-        m.u["Mg2+", x] * m.c["SO32-", x] + m.c["Mg2+", x] * m.u["SO32-", x]
-
-
-m.MgSO3_diss_der = Constraint(m.x, rule=_MgSO3_diss_der)
-
-
-def _MgHCO3_diss_der(m, x):
-    return m.Keq["MgHCO3+"] * m.u["MgHCO3+", x] == \
-           m.u["Mg2+", x] * m.c["HCO3-", x] + m.c["Mg2+", x] * m.u["HCO3-", x]
-
-
-m.MgHCO3_diss_der = Constraint(m.x, rule=_MgHCO3_diss_der)
-
-
-def _MgSO4_diss_der(m, x):
-    return m.Keq["MgSO4"] * m.u["MgSO4", x] == \
-        m.u["Mg2+", x] * m.c["SO42-", x] + m.c["Mg2+", x] * m.u["SO42-", x]
-
-
-m.MgSO4_diss_der = Constraint(m.x, rule=_MgSO4_diss_der)
-"""
 
 
 # =============================================================================

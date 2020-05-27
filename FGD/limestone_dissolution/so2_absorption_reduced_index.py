@@ -16,7 +16,7 @@ from pyomo.environ import (ConcreteModel, Set, Param, Var,
 from pyomo.opt import (SolverFactory, SolverStatus, TerminationCondition,
                        ProblemFormat)
 from pyomo.dae import DerivativeVar, ContinuousSet
-from pyomo.contrib.pynumero.interfaces import PyomoNLP
+# from pyomo.contrib.pynumero.interfaces import PyomoNLP
 
 import matplotlib.pyplot as plt
 import numpy as np

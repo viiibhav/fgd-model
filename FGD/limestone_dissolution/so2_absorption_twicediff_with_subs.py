@@ -16,7 +16,7 @@ from pyomo.environ import (ConcreteModel, Set, Param, Var,
 from pyomo.opt import (SolverFactory, SolverStatus, TerminationCondition,
                        ProblemFormat)
 from pyomo.dae import DerivativeVar, ContinuousSet
-from pyomo.contrib.pynumero.interfaces import PyomoNLP
+# from pyomo.contrib.pynumero.interfaces import PyomoNLP
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -721,10 +721,10 @@ m.objective = Objective(expr=1, sense=minimize)
 
 
 # =============================================================================
-discretizer = TransformationFactory("dae.finite_difference")
-discretizer.apply_to(m, nfe=nfe, wrt=m.x, scheme="BACKWARD")
-#discretizer = TransformationFactory("dae.collocation")
-#discretizer.apply_to(m, nfe=nfe, ncp=1, wrt=m.x)#, scheme="Backward")
+# discretizer = TransformationFactory("dae.finite_difference")
+# discretizer.apply_to(m, nfe=nfe, wrt=m.x, scheme="BACKWARD")
+discretizer = TransformationFactory("dae.collocation")
+discretizer.apply_to(m, nfe=nfe, ncp=3, wrt=m.x)#, scheme="Backward")
 
 #m.dudx["SO2", 0].fix(0.0)
 #m.dudx["CO2", 0].fix(0.0)
@@ -803,9 +803,9 @@ stale_dcdx_vars = [comp for comp in m.dcdx if m.dcdx[comp[0], comp[1]].stale]
 ##plt.figure(figsize=(10,5))
 plt.rc('text', usetex=True)
 plt.rc('font', family='serif')
-plt.rc('xtick', labelsize=20) 
-plt.rc('ytick', labelsize=20)
-plt.rc('axes', labelsize=25)    # fontsize of the x and y labels
+# plt.rc('xtick', labelsize=20) 
+# plt.rc('ytick', labelsize=20)
+# plt.rc('axes', labelsize=25)    # fontsize of the x and y labels
 plt.plot(list(m.x), [value(m.c["SO2", x_]) for x_ in list(m.x)], '-')
 #xticks = [round(x_, 5) for x_ in m.x]
 #plt.xticks(xticks, xticks[::-1])
