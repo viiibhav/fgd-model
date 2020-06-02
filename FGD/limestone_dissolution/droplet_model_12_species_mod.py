@@ -52,16 +52,6 @@ spc = [sp for sp in sp_all if sp != "CO2" and sp != "SO2"]
 species_removed = ['CaHSO3+', 'MgHSO3+', 'MgSO3', 'MgSO4', 'Mg2+', 'MgHCO3+',
                    'Cl-', 'SO42-', 'CaSO4']
 i = [sp for sp in i if sp not in species_removed]
-# i.remove("CaHSO3+")
-# i.remove("MgHSO3+")
-# i.remove("MgSO3")
-# i.remove("MgSO4")
-# i.remove("Mg2+")
-# i.remove("MgHCO3+")
-# i.remove("Cl-")
-# i.remove("SO42-")
-# i.remove("CaSO4")
-
 m.i = Set(initialize=i)
 
 # Eqm species
@@ -136,7 +126,6 @@ kG["CO2"] = 5e-05
 #m.c = Var(m.i, m.x, initialize=_c_init)
 m.c = Var(m.i, m.x, initialize=1e-03)
 m.u = Var(m.i, m.x, initialize=1e-06)
-m.v = Var(m.i, m.x, initialize=1e-03)
 m.dcdx = DerivativeVar(m.c, wrt=(m.x), initialize=1e-03)
 m.dudx = DerivativeVar(m.u, wrt=(m.x), initialize=0.0)
 
@@ -213,7 +202,7 @@ rho_CO2 = 1.98     # [kg/m**3]  # STP
 H_CO2 = 1 / 0.035  # [bar/(mol/kg)]  # NIST
 H_CO2 *= 10**5     # [Pa / (mol/kg)]
 H_CO2 /= rho_CO2   # [Pa / (mol/m**3)]
-H_CO2 *= 1e+06     # convert to [Pa / (mol/cm**3)]
+H_CO2 *= 1e+03     # convert to [Pa / (mol/L)]
 m.H_CO2 = Param(initialize=H_CO2)
 
 
@@ -257,99 +246,79 @@ m.CaHCO3_diss = Constraint(m.x, rule=_CaHCO3_diss)
 # =============================================================================
 # Twice-differentiated equations
 def _water_diss_der2(m, x):
-#    if x == 0:
-##        return (m.u["H+", x+dx] - m.u["H+", x]) / dx * m.c["OH-", x] + \
-##            m.c["H+", x] * (m.u["OH-", x+dx] - m.u["OH-", x]) / dx + \
-##            2 * m.u["H+", x] * m.u["OH-", x] == 0
-#    else:
-    return m.v["H+", x] * m.c["OH-", x] + \
-        m.c["H+", x] * m.v["OH-", x] + \
-        2 * m.u["H+", x] * m.u["OH-", x] == 0
+    if x == 0:
+        return m.u['OH-', x] == 0
+    else:
+        return m.dudx["H+", x] * m.c["OH-", x] + \
+            m.c["H+", x] * m.dudx["OH-", x] + \
+            2 * m.u["H+", x] * m.u["OH-", x] == 0
 m.water_diss_der2 = Constraint(m.x, rule=_water_diss_der2)
 
 
 def _H2SO3_diss_der2(m, x):  # use Keq[H2SO3]
 #    if x == r:  # SURFACE CONDITION FOR SO2!
-##    if x == 0:
-##        return m.Keq["SO2"] * (m.u["SO2", x+dx] - m.u["SO2", x]) / dx == \
-##            (m.u["H+", x+dx] - m.u["H+", x]) / dx * m.c["HSO3-", x] + \
-##            m.c["H+", x] * (m.u["HSO3-", x+dx] - m.u["HSO3-", x]) / dx + \
-##            2 * m.u["H+", x] * m.u["HSO3-", x]
-#    else:
-    return m.Keq["SO2"] * m.v["SO2", x] == \
-        m.v["H+", x] * m.c["HSO3-", x] + \
-        m.c["H+", x] * m.v["HSO3-", x] + \
-        2 * m.u["H+", x] * m.u["HSO3-", x]
+    if x == r:
+        return m.u['SO2', x] == kG['SO2'] * (p['SO2'] - p_i['SO2'])
+    else:
+        return m.Keq["SO2"] * m.dudx["SO2", x] == \
+            m.dudx["H+", x] * m.c["HSO3-", x] + \
+            m.c["H+", x] * m.dudx["HSO3-", x] + \
+            2 * m.u["H+", x] * m.u["HSO3-", x]
 m.H2SO3_diss_der2 = Constraint(m.x, rule=_H2SO3_diss_der2)
 
 
 def _HSO3_diss_der2(m, x):
-#    if x == 0:
-##        return m.Keq["HSO3-"] * (m.u["HSO3-", x+dx] - m.u["HSO3-", x]) / dx == \
-##            (m.u["H+", x+dx] - m.u["H+", x]) / dx * m.c["SO32-", x] + \
-##            m.c["H+", x] * (m.u["SO32-", x+dx] - m.u["SO32-", x]) / dx + \
-##            2 * m.c["H+", x] * m.u["SO32-", x]
-#    else:
-    return m.Keq["HSO3-"] * m.v["HSO3-", x] == \
-        m.v["H+", x] * m.c["SO32-", x] + \
-        m.c["H+", x] * m.v["SO32-", x] + \
-        2 * m.c["H+", x] * m.u["SO32-", x]
+    if x == 0:
+        return m.u['HSO3-', x] == 0
+    else:
+        return m.Keq["HSO3-"] * m.dudx["HSO3-", x] == \
+            m.dudx["H+", x] * m.c["SO32-", x] + \
+            m.c["H+", x] * m.dudx["SO32-", x] + \
+            2 * m.c["H+", x] * m.u["SO32-", x]
 m.HSO3_diss_der2 = Constraint(m.x, rule=_HSO3_diss_der2)
 
 
 def _HCO3_diss_der2(m, x):
-#    if x == 0:
-##        return m.Keq["HCO3-"] * (m.u["HCO3-", x+dx] - m.u["HCO3-", x]) / dx == \
-##            (m.u["H+", x+dx] - m.u["H+", x]) / dx * m.c["CO32-", x] + \
-##            m.c["H+", x] * (m.u["CO32-", x+dx] - m.u["CO32-", x]) / dx + \
-##            2 * m.u["H+", x] * m.u["CO32-", x]
-#    else:
-    return m.Keq["HCO3-"] * m.v["HCO3-", x] == \
-        m.v["H+", x] * m.c["CO32-", x] + \
-        m.c["H+", x] * m.v["CO32-", x] + \
-        2 * m.u["H+", x] * m.u["CO32-", x]
+    if x == 0:
+        return m.u['HCO3-', x] == 0
+    else:
+        return m.Keq["HCO3-"] * m.dudx["HCO3-", x] == \
+            m.dudx["H+", x] * m.c["CO32-", x] + \
+            m.c["H+", x] * m.dudx["CO32-", x] + \
+            2 * m.u["H+", x] * m.u["CO32-", x]
 m.HCO3_diss_der2 = Constraint(m.x, rule=_HCO3_diss_der2)
 
 
 def _CaSO3_diss_der2(m, x):
-#    if x == 0:
-##        return m.Keq["CaSO3"] * (m.u["CaSO3", x+dx] - m.u["CaSO3", x]) / dx == \
-##            (m.u["Ca2+", x+dx] - m.u["Ca2+", x]) / dx * m.c["SO32-", x] + \
-##            m.c["Ca2+", x] * (m.u["SO32-", x+dx] - m.u["SO32-", x]) / dx + \
-##            2 * m.u["Ca2+", x] * m.u["SO32-", x]
-#    else:
-    return m.Keq["CaSO3"] * m.v["CaSO3", x] == \
-        m.v["Ca2+", x] * m.c["SO32-", x] + \
-        m.c["Ca2+", x] * m.v["SO32-", x] + \
-        2 * m.u["Ca2+", x] * m.u["SO32-", x]
+    if x == 0:
+        return m.u['SO32-', x] == 0
+    else:
+        return m.Keq["CaSO3"] * m.dudx["CaSO3", x] == \
+            m.dudx["Ca2+", x] * m.c["SO32-", x] + \
+            m.c["Ca2+", x] * m.dudx["SO32-", x] + \
+            2 * m.u["Ca2+", x] * m.u["SO32-", x]
 m.CaSO3_diss_der2 = Constraint(m.x, rule=_CaSO3_diss_der2)
 
 
 def _CaCO3_diss_der2(m, x):
-#    if x == 0:
-##        return m.Keq["CaCO3"] * (m.u["CaCO3", x+dx] - m.u["CaCO3", x]) / dx == \
-##            (m.u["Ca2+", x+dx] - m.u["Ca2+", x]) / dx * m.c["CO32-", x] + \
-##            m.c["Ca2+", x] * (m.u["CO32-", x+dx] - m.u["CO32-", x]) / dx + \
-##            2 * m.u["Ca2+", x] * m.u["CO32-", x]
-#    else:
-    return m.Keq["CaCO3"] * m.v["CaCO3", x] == \
-        m.v["Ca2+", x] * m.c["CO32-", x] + \
-        m.c["Ca2+", x] * m.v["CO32-", x] + \
-        2 * m.u["Ca2+", x] * m.u["CO32-", x]
+    if x == 0:
+        return m.u['CO32-', x] == 0
+    else:
+        return m.Keq["CaCO3"] * m.dudx["CaCO3", x] == \
+            m.dudx["Ca2+", x] * m.c["CO32-", x] + \
+            m.c["Ca2+", x] * m.dudx["CO32-", x] + \
+            2 * m.u["Ca2+", x] * m.u["CO32-", x]
 m.CaCO3_diss_der2 = Constraint(m.x, rule=_CaCO3_diss_der2)
 
 
 def _CaHCO3_diss_der2(m, x):
-#    if x == 0:
-##        return m.Keq["CaHCO3+"] * (m.u["CaHCO3+", x+dx] - m.u["CaHCO3+", x]) / dx == \
-##            (m.u["Ca2+", x+dx] - m.u["Ca2+", x]) / dx * m.c["HCO3-", x] + \
-##            m.c["Ca2+", x] * (m.u["HCO3-", x+dx] - m.u["HCO3-", x]) / dx + \
-##            2 * m.u["Ca2+", x] * m.u["HCO3-", x]
-#    else:
-    return m.Keq["CaHCO3+"] * m.v["CaHCO3+", x] == \
-        m.v["Ca2+", x] * m.c["HCO3-", x] + \
-        m.c["Ca2+", x] * m.v["HCO3-", x] + \
-        2 * m.u["Ca2+", x] * m.u["HCO3-", x]
+    if x == 0:
+        return m.u['Ca2+', x] == 0
+    else:
+        return m.Keq["CaHCO3+"] * m.dudx["CaHCO3+", x] == \
+            m.dudx["Ca2+", x] * m.c["HCO3-", x] + \
+            m.c["Ca2+", x] * m.dudx["HCO3-", x] + \
+            2 * m.u["Ca2+", x] * m.u["HCO3-", x]
 m.CaHCO3_diss_der2 = Constraint(m.x, rule=_CaHCO3_diss_der2)
 
 
@@ -368,28 +337,6 @@ def _reform_con(m, i, x):
 m.reform_con = Constraint(m.i, m.x, rule=_reform_con)
 
 
-#for comp in diff_vars:
-#    m.reform_con[comp, 0].deactivate()
-#    m.reform_con.add([comp, 0], expr=())
-
-
-# =============================================================================
-# Define dudx = v
-def _reform_con_2(m, i, x):
-    if i == "SO2" or i == "CO2":
-#        if x == 0:
-        if x == r:
-            return m.u[i, x] == kG[i] * (p[i] - p_i[i])
-        else:
-            return m.dudx[i, x] == m.v[i, x]
-    else:
-        if x == 0:
-            return m.u[i, x] == 0
-        else:
-            return m.dudx[i, x] == m.v[i, x]
-m.reform_con2 = Constraint(m.i, m.x, rule=_reform_con_2)
-
-
 # =============================================================================
 # Combined mass balances [FIX x==r boundary case]
 def _sulfite(m, x):
@@ -398,7 +345,7 @@ def _sulfite(m, x):
     else:
         expr = 0
         for k in sulfite_species:
-            expr += m.Diff[k] * (m.v[k, x] - 2 / (x) * m.u[k, x])
+            expr += m.Diff[k] * (m.dudx[k, x] - 2 / (x) * m.u[k, x])
         return expr == 0
 m.sulfite = Constraint(m.x, rule=_sulfite)
 
@@ -409,7 +356,7 @@ def _carbonate(m, x):
     else:
         expr = 0
         for k in carbonate_species:
-            expr += m.Diff[k] * (m.v[k, x] - 2 / (x) * m.u[k, x])
+            expr += m.Diff[k] * (m.dudx[k, x] - 2 / (x) * m.u[k, x])
         expr += m.rd_CaCO3[x]
         return expr == 0
 m.carbonate = Constraint(m.x, rule=_carbonate)
@@ -421,7 +368,7 @@ def _calcium(m, x):
     else:
         expr = 0
         for k in calcium_species:
-            expr += m.Diff[k] * (m.v[k, x] - 2 / (x) * m.u[k, x])
+            expr += m.Diff[k] * (m.dudx[k, x] - 2 / (x) * m.u[k, x])
         expr += m.rd_CaCO3[x]
         return expr == 0
 m.calcium = Constraint(m.x, rule=_calcium)
@@ -429,10 +376,12 @@ m.calcium = Constraint(m.x, rule=_calcium)
 
 def _carbondioxide(m, x):
     k = "CO2"
-    if x == 0:# or x == r:
-        return m.u[k, x] == kG[k] * (m.p[k] - m.p_i[k])
+    if x == 0:
+        return m.u[k, x] == 0
+    # elif x == r:
+    #     return m.u[k, x] == kG[k] * (m.p[k] - m.p_i[k])
     else:
-        expr = m.Diff[k] * (m.v[k, x] - 2 / (x) * m.u[k, x])
+        expr = m.Diff[k] * (m.dudx[k, x] - 2 / (x) * m.u[k, x])
         expr += m.r_CO2[x]
         return expr == 0
 m.carbondioxide = Constraint(m.x, rule=_carbondioxide)
@@ -442,7 +391,7 @@ def _charge(m, x):
     if x == 0:# or x == r:
         return m.u["H+", x] == 0
     else:
-        expr = sum(m.z[k] * m.Diff[k] * (m.v[k, x] -
+        expr = sum(m.z[k] * m.Diff[k] * (m.dudx[k, x] -
                    2 / (x) * m.u[k, x]) for k in charged_species)
         return expr == 0
 m.charge = Constraint(m.x, rule=_charge)
@@ -458,26 +407,33 @@ m.objective = Objective(expr=1, sense=minimize)
 # discretizer = TransformationFactory("dae.finite_difference")
 # discretizer.apply_to(m, nfe=nfe, wrt=m.x, scheme="BACKWARD")
 discretizer = TransformationFactory("dae.collocation")
-discretizer.apply_to(m, nfe=nfe, ncp=3, wrt=m.x)#, scheme='LAGRANGE-LEGENDRE')
+discretizer.apply_to(m, nfe=nfe, ncp=3, wrt=m.x, scheme='LAGRANGE-LEGENDRE')
+
 
 # =============================================================================
-m.dudx["SO2", r].fix(0.0)
-m.dudx["CO2", r].fix(0.0)
-for comp in diff_vars:
-    if comp == "CO2":
-        m.dcdx[comp, r].fix(1.0e-06)
+# Fix variables and deactivate constraints
+m.write(filename='droplet_mod_before_fixing.nl', format=ProblemFormat.nl,
+        io_options={'symbolic_solver_labels':True})
+
+for sp in m.i:
+    # fix all dudx at boundaries
+    if sp == 'SO2':
+        m.dudx[sp, r].fix(0.0)  # 1 vars
     else:
-        m.dcdx[comp, r].fix(0.0)
+        m.dudx[sp, 0].fix(0.0)  # 11 vars
 
-# m.write(filename='droplet_before_fixing.nl', format=ProblemFormat.nl,
-#         io_options={'symbolic_solver_labels':True})
+    # fix dcdx -- all alg_vars, and boundaries of diff_vars
+    if sp in alg_vars:
+        m.dcdx[sp, :].fix(0.0)  # 49 vars
+    else:
+        m.dcdx[sp, r].fix(0.0)  # 5 vars
+    # Total fixed vars = 66
 
-# for comp in m.i:
-#     m.dcdx[comp, r].fix(1.0e-06)
-#     if comp == 'CO2' or comp == 'SO2':
-#         m.dudx[comp, r].fix(0.0)
-#     else:
-#         m.dudx[comp, 0].fix(0.0)
+    # deactivate eqns (dcdx_disc_eq and c_x_cont_eq)
+    if sp in alg_vars:
+        m.dcdx_disc_eq[sp, :].deactivate()  # 7 * 4 = 28
+        m.c_x_cont_eq[sp, :].deactivate()   # 7 * 2 = 14
+    # Total deactivated eqns = 42
 
 
 # =============================================================================
@@ -497,8 +453,8 @@ opt.options["honor_original_bounds"] = "yes"
 
 # sb = TransformationFactory('contrib.strip_var_bounds')
 # sb.apply_to(m,reversible=True)
-# m.write(filename='droplet_after_fixing.nl', format=ProblemFormat.nl,
-#         io_options={'symbolic_solver_labels':True})
+m.write(filename='droplet_mod_after_fixing.nl', format=ProblemFormat.nl,
+        io_options={'symbolic_solver_labels':True})
 results = opt.solve(m, tee=True)
 
 if (results.solver.termination_condition == TerminationCondition.infeasible or
